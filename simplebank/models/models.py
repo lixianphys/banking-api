@@ -23,3 +23,33 @@ class Account(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     owner = relationship("Customer", back_populates="accounts")
+    outgoing_transactions = relationship(
+        "Transaction", 
+        foreign_keys="Transaction.from_account_id",
+        back_populates="from_account"
+    )
+    incoming_transactions = relationship(
+        "Transaction", 
+        foreign_keys="Transaction.to_account_id",
+        back_populates="to_account"
+    )
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_account_id = Column(Integer, ForeignKey("accounts.id"))
+    to_account_id = Column(Integer, ForeignKey("accounts.id"))
+    amount = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    from_account = relationship(
+        "Account", 
+        foreign_keys=[from_account_id],
+        back_populates="outgoing_transactions"
+    )
+    to_account = relationship(
+        "Account", 
+        foreign_keys=[to_account_id],
+        back_populates="incoming_transactions"
+    ) 
