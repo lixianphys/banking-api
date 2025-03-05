@@ -16,8 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from simplebank.api import customers
+from simplebank.api import customers,accounts   
 app.include_router(customers.router, prefix="/api", tags=["customers"])
+app.include_router(accounts.router, prefix="/api", tags=["accounts"])
 
 
 @app.get("/")

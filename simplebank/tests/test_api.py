@@ -64,3 +64,27 @@ def test_get_customer(test_db):
     customer = response.json()
     assert customer["name"] == "Arisha Barron"
 
+def test_create_account(test_db):
+    response = client.post(
+        "/api/accounts",
+        json={"customer_id": 1, "initial_deposit": 100.0}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["customer_id"] == 1
+    assert data["balance"] == 100.0
+
+def test_get_account_balance(test_db):
+    # First create an account
+    account_response = client.post(
+        "/api/accounts",
+        json={"customer_id": 1, "initial_deposit": 500.0}
+    )
+    account_id = account_response.json()["id"]
+    
+    # Then get its balance
+    balance_response = client.get(f"/api/accounts/{account_id}/balance")
+    assert balance_response.status_code == 200
+    data = balance_response.json()
+    assert data["account_id"] == account_id
+    assert data["balance"] == 500.0
