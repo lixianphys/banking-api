@@ -16,6 +16,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from simplebank.api import customers
+app.include_router(customers.router, prefix="/api", tags=["customers"])
+
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Simple Banking API"}
