@@ -5,12 +5,14 @@ from sqlalchemy import or_
 
 from simplebank.database import get_db
 from simplebank.models import models, schemas
+from simplebank.api.security_deps import SecurityAudit
 
 router = APIRouter()
+transaction_audit = SecurityAudit(operation_name="Transaction API")
 
-@router.post("/transactions", response_model=schemas.Transaction)
+@router.post("/transactions", response_model=schemas.Transaction,dependencies=[Depends(transaction_audit)])
 def create_transaction(transaction: schemas.TransactionCreate, db: Session = Depends(get_db)):
-    # Check if both accounts exist
+    # Check if both accounts exist``
     from_account = db.query(models.Account).filter(models.Account.id == transaction.from_account_id).first()
     to_account = db.query(models.Account).filter(models.Account.id == transaction.to_account_id).first()
     
@@ -40,12 +42,12 @@ def create_transaction(transaction: schemas.TransactionCreate, db: Session = Dep
     
     return db_transaction
 
-@router.get("/transactions", response_model=List[schemas.Transaction])
+@router.get("/transactions", response_model=List[schemas.Transaction],dependencies=[Depends(transaction_audit)])
 def read_transactions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     transactions = db.query(models.Transaction).offset(skip).limit(limit).all()
     return transactions
 
-@router.get("/accounts/{account_id}/transactions", response_model=schemas.TransferHistoryResponse)
+@router.get("/accounts/{account_id}/transactions", response_model=schemas.TransferHistoryResponse,dependencies=[Depends(transaction_audit)])
 def read_account_transactions(account_id: int, db: Session = Depends(get_db)):
     # Check if account exists
     account = db.query(models.Account).filter(models.Account.id == account_id).first()
