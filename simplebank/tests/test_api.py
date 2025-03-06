@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 from simplebank.database import get_db
 from simplebank.models.models import Base
 from simplebank.main import app
-from simplebank.api.customers import init_customers
+from simplebank.init_db import init_customers
 
 # Use in-memory SQLite for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"

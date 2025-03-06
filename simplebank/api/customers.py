@@ -7,13 +7,6 @@ from simplebank.models import models, schemas
 
 router = APIRouter()
 
-# Initial customer data as specified in the requirements
-initial_customers = [
-    {"id": 1, "name": "Arisha Barron"},
-    {"id": 2, "name": "Branden Gibson"},
-    {"id": 3, "name": "Rhonda Church"},
-    {"id": 4, "name": "Georgina Hazel"}
-]
 
 @router.get("/customers", response_model=List[schemas.Customer])
 def read_customers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -35,11 +28,3 @@ def create_customer(customer: schemas.CustomerCreate, db: Session = Depends(get_
     db.refresh(db_customer)
     return db_customer
 
-# Function to initialize the database with the predefined customers
-def init_customers(db: Session):
-    # Check if customers already exist
-    if db.query(models.Customer).count() == 0:
-        for customer_data in initial_customers:
-            customer = models.Customer(**customer_data)
-            db.add(customer)
-        db.commit() 
