@@ -2,6 +2,8 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from simplebank.api import customers,accounts,transactions   
 from simplebank.api.security_deps import verify_api_key
+from simplebank.init_db import init_db, init_customers
+from simplebank.database import SessionLocal
 
 app = FastAPI(
     title="Simple Banking API",
@@ -26,6 +28,13 @@ app.include_router(transactions.router, prefix="/api", tags=["transactions"],dep
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Simple Banking API"}
+
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    init_db()
+    init_customers(db)
+    
 
 if __name__ == "__main__":
     import uvicorn
