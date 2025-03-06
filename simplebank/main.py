@@ -4,11 +4,23 @@ from simplebank.api import customers,accounts,transactions
 from simplebank.api.security_deps import verify_api_key
 from simplebank.init_db import init_db, init_customers
 from simplebank.database import SessionLocal
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup code
+    db = SessionLocal()
+    init_db()
+    init_customers(db)
+    yield
+    # Shutdown code (if needed)
+    
 
 app = FastAPI(
     title="Simple Banking API",
     description="A simple banking API for managing accounts and transactions",
     version="0.1.0",
+    lifespan=lifespan
 )
 
 # Configure CORS
@@ -29,12 +41,6 @@ app.include_router(transactions.router, prefix="/api", tags=["transactions"],dep
 async def root():
     return {"message": "Welcome to the Simple Banking API"}
 
-@app.on_event("startup")
-def startup_event():
-    db = SessionLocal()
-    init_db()
-    init_customers(db)
-    
 
 if __name__ == "__main__":
     import uvicorn
