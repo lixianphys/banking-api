@@ -74,7 +74,7 @@ class TestGeneralFeatures:
     def test_create_account(self,client):
         response = client.post(
             "/api/accounts",
-            json={"customer_id": 1, "initial_deposit": 100.0}
+            json={"customer_id": 1, "initial_deposit": 100.0}, headers={"X-API-Key": API_KEY}
         )
         assert response.status_code == 200
         data = response.json()
@@ -85,12 +85,12 @@ class TestGeneralFeatures:
         # First create an account
         account_response = client.post(
             "/api/accounts",
-            json={"customer_id": 1, "initial_deposit": 500.0}
+            json={"customer_id": 1, "initial_deposit": 500.0}, headers={"X-API-Key": API_KEY}
         )
         account_id = account_response.json()["id"]
         
         # Then get its balance
-        balance_response = client.get(f"/api/accounts/{account_id}/balance")
+        balance_response = client.get(f"/api/accounts/{account_id}/balance",headers={"X-API-Key": API_KEY})
         assert balance_response.status_code == 200
         data = balance_response.json()
         assert data["account_id"] == account_id
@@ -101,13 +101,13 @@ class TestGeneralFeatures:
         # Create two accounts
         account1_response = client.post(
             "/api/accounts",
-            json={"customer_id": 1, "initial_deposit": 1000.0}
+            json={"customer_id": 1, "initial_deposit": 1000.0}, headers={"X-API-Key": API_KEY}
         )
         account1_id = account1_response.json()["id"]
         
         account2_response = client.post(
             "/api/accounts",
-            json={"customer_id": 2, "initial_deposit": 500.0}
+            json={"customer_id": 2, "initial_deposit": 500.0}, headers={"X-API-Key": API_KEY}
         )
         account2_id = account2_response.json()["id"]
         
@@ -119,16 +119,16 @@ class TestGeneralFeatures:
                 "from_account_id": account1_id,
                 "to_account_id": account2_id,
                 "amount": transfer_amount
-            }
+            }, headers={"X-API-Key": API_KEY}
         )
         assert transfer_response.status_code == 200
         
         # Check balances after transfer
-        balance1_response = client.get(f"/api/accounts/{account1_id}/balance")
+        balance1_response = client.get(f"/api/accounts/{account1_id}/balance",headers={"X-API-Key": API_KEY})
         balance1 = balance1_response.json()["balance"]
         assert balance1 == 1000.0 - transfer_amount
         
-        balance2_response = client.get(f"/api/accounts/{account2_id}/balance")
+        balance2_response = client.get(f"/api/accounts/{account2_id}/balance",headers={"X-API-Key": API_KEY})
         balance2 = balance2_response.json()["balance"]
         assert balance2 == 500.0 + transfer_amount
 
@@ -136,14 +136,14 @@ class TestGeneralFeatures:
         # Create an account with a small balance
         account_response = client.post(
             "/api/accounts",
-            json={"customer_id": 1, "initial_deposit": 50.0}
+            json={"customer_id": 1, "initial_deposit": 50.0}, headers={"X-API-Key": API_KEY}
         )
         account1_id = account_response.json()["id"]
         
         # Create a second account
         account2_response = client.post(
             "/api/accounts",
-            json={"customer_id": 2, "initial_deposit": 100.0}
+            json={"customer_id": 2, "initial_deposit": 100.0}, headers={"X-API-Key": API_KEY}
         )
         account2_id = account2_response.json()["id"]
         
@@ -154,7 +154,7 @@ class TestGeneralFeatures:
                 "from_account_id": account1_id,
                 "to_account_id": account2_id,
                 "amount": 100.0  # More than the 50.0 available
-            }
+            }, headers={"X-API-Key": API_KEY}
         )
         assert transfer_response.status_code == 400  # Bad request - insufficient funds
 
@@ -162,13 +162,13 @@ class TestGeneralFeatures:
         # Create two accounts
         account1_response = client.post(
             "/api/accounts",
-            json={"customer_id": 1, "initial_deposit": 1000.0}
+            json={"customer_id": 1, "initial_deposit": 1000.0}, headers={"X-API-Key": API_KEY}
         )
         account1_id = account1_response.json()["id"]
         
         account2_response = client.post(
             "/api/accounts",
-            json={"customer_id": 2, "initial_deposit": 500.0}
+            json={"customer_id": 2, "initial_deposit": 500.0}, headers={"X-API-Key": API_KEY}
         )
         account2_id = account2_response.json()["id"]
         
@@ -179,7 +179,7 @@ class TestGeneralFeatures:
                 "from_account_id": account1_id,
                 "to_account_id": account2_id,
                 "amount": 200.0
-            }
+            }, headers={"X-API-Key": API_KEY}
         )
         
         client.post(
@@ -188,11 +188,11 @@ class TestGeneralFeatures:
                 "from_account_id": account2_id,
                 "to_account_id": account1_id,
                 "amount": 50.0
-            }
+            }, headers={"X-API-Key": API_KEY}
         )
         
         # Get transfer history for account1
-        history_response = client.get(f"/api/accounts/{account1_id}/transactions")
+        history_response = client.get(f"/api/accounts/{account1_id}/transactions",headers={"X-API-Key": API_KEY})
         assert history_response.status_code == 200
         history = history_response.json()
         assert history["account_id"] == account1_id
