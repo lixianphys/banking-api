@@ -67,13 +67,35 @@ pytest app/tests/
 - **Database**: Used SQLAlchemy with SQLite for simplicity. In a production environment, a more robust database like PostgreSQL would be appropriate.
 - **Error Handling**: Implemented basic error handling for common scenarios like insufficient funds and non-existent accounts.
 - **Validation**: Used Pydantic models for data validation and serialization.
+## Security Features
+
+The API implements several security measures to protect against common threats:
+
+### API Key Authentication
+- All endpoints require a valid API key via the `X-API-Key` header
+- Protects against unauthorized access to sensitive banking operations
+
+### Rate Limiting
+- Limits the number of requests from a single IP address
+- Prevents brute force attacks and API abuse
+- Configurable via environment variables
+
+### Security Headers
+- Implements standard security headers on all responses:
+  - X-Content-Type-Options
+  - X-Frame-Options
+  - X-XSS-Protection
+  - Cache-Control
+  - Pragma
+
+### Request Auditing
+- Logs all API operations with client IP, method, path, status code, and duration
+- Provides an audit trail for security monitoring and troubleshooting
+
+
 
 ## Future Improvements
 
-### Security
-- Add authentication layer (JWT-based)
-- Add Role- and resource-level access control
-- Apply dependencies to routes
 
 ### Optimization for mobile clients
 - Add pagination for list endpoints
