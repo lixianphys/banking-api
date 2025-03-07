@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from simplebank.api import customers,accounts,transactions   
-from simplebank.api.security_deps import verify_api_key
+from simplebank.utils.security_deps import verify_api_key
 from simplebank.init_db import init_db, init_customers
 from simplebank.database import SessionLocal
 from contextlib import asynccontextmanager
