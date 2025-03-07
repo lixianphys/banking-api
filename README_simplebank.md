@@ -92,13 +92,29 @@ The API implements several security measures to protect against common threats:
 - Logs all API operations with client IP, method, path, status code, and duration
 - Provides an audit trail for security monitoring and troubleshooting
 
+### Caching
+- Implements ETag-based caching for efficient resource retrieval
+- Supports conditional requests with 304 Not Modified responses
+- Reduces bandwidth usage and improves API performance
+- Automatically generates ETags based on response content
+
+### Response Customization
+- Supports different detail levels (minimal/full) for resource representations
+- Allows clients to request only the data they need
+- Reduces payload size and improves performance
+- Example: `GET /api/accounts/{account_id}?detail_level=minimal`
+
+### Resource Expansion
+- Supports expanding related resources in a single request
+- Reduces the number of API calls needed for common operations
+- Example: `GET /api/accounts/{account_id}?expand=customer,recent_transactions`
+
+### Cursor-based Pagination
+- Implements efficient cursor-based pagination for large result sets
+- Provides consistent results even when data changes between requests
+- Includes `next_cursor` in responses for easy navigation
+- Example: `GET /api/accounts/{account_id}/transactions?cursor=eyJ0aW1lc3RhbXAiOiIyMDIzLTA1LTAxVDEyOjM0OjU2IiwiaWQiOjEyM30=&limit=20`
 
 
 ## Future Improvements
 
-
-### Optimization for mobile clients
-- Add pagination for list endpoints
-- Add caching strategies
-
-### Handle concurrency
