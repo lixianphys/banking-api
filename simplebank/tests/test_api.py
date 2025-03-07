@@ -6,11 +6,15 @@ from sqlalchemy.pool import StaticPool
 
 from simplebank.database import get_db
 from simplebank.models.models import Base
+from simplebank.models import models
+from simplebank.utils.security_deps import API_KEY, SECURITY_HEADERS, SecurityAudit
 from simplebank.main import app
 from simplebank.init_db import init_customers
-from simplebank.api.security_deps import API_KEY, SECURITY_HEADERS, SecurityAudit
 from unittest.mock import patch, MagicMock
 import time
+from datetime import datetime, timedelta
+import base64
+import json
 
 # Use in-memory SQLite for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -49,7 +53,59 @@ def test_db():
 def client(test_db):
     return TestClient(app)
 
+@pytest.fixture
+def sample_transactions():
+    """Create sample transactions using the existing accounts"""
+    db = TestingSessionLocal()
+    try:
+        # Get the first two customers
+        customers = db.query(models.Customer).limit(2).all()
+        
+        # Create two test accounts
+        account1 = models.Account(
+            customer_id=customers[0].id,
+            balance=1000.0
+        )
+        account2 = models.Account(
+            customer_id=customers[1].id,
+            balance=1000.0
+        )
+        db.add_all([account1, account2])
+        db.commit()
+        db.refresh(account1)
+        db.refresh(account2)
+        
+        print(f"Created test accounts: {account1.id} and {account2.id}")
 
+        # Create transactions with different timestamps
+        base_time = datetime(2024, 1, 1, 12, 0)
+        transactions = []
+        
+        for i in range(25):  # Create 25 transactions
+            tx = models.Transaction(
+                from_account_id=account1.id,
+                to_account_id=account2.id,
+                amount=100 + i,
+                timestamp=base_time - timedelta(hours=i)  # Transactions spread over time
+            )
+            transactions.append(tx)
+        
+        db.add_all(transactions)
+        db.commit()
+        
+        # Print debug information about created transactions
+        created_transactions = db.query(models.Transaction).filter(
+            models.Transaction.from_account_id == account1.id
+        ).order_by(models.Transaction.timestamp.desc()).all()
+        
+        print(f"\nCreated {len(created_transactions)} transactions")
+        print("Sample of transaction timestamps:")
+        for tx in created_transactions[:3]:
+            print(f"ID: {tx.id}, Timestamp: {tx.timestamp}, From: {tx.from_account_id}, To: {tx.to_account_id}")
+        
+        return created_transactions
+    finally:
+        db.close()
 
 class TestGeneralFeatures:
     def test_read_customers(self,client):
@@ -194,9 +250,15 @@ class TestGeneralFeatures:
         # Get transfer history for account1
         history_response = client.get(f"/api/accounts/{account1_id}/transactions",headers={"X-API-Key": API_KEY})
         assert history_response.status_code == 200
-        history = history_response.json()
-        assert history["account_id"] == account1_id
-        assert len(history["transactions"]) == 2 
+        data = history_response.json()
+        
+        # Check for the paginated format
+        assert "items" in data
+        assert len(data["items"]) == 2  # Should have 2 transactions
+        
+        # Verify that all transactions are related to this account
+        for tx in data["items"]:
+            assert tx["from_account_id"] == account1_id or tx["to_account_id"] == account1_id
 
 
 class TestSecurityFeatures:
@@ -223,11 +285,11 @@ class TestSecurityFeatures:
         """Test that security headers are added to responses"""
         response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
         
-        # Check that all security headers are present
+        # Check that security headers were added
         for header, value in SECURITY_HEADERS.items():
             assert response.headers.get(header) == value
     
-    @patch('simplebank.api.security_deps.check_rate_limit')
+    @patch('simplebank.utils.security_deps.check_rate_limit')
     def test_rate_limiting(self, mock_check_rate_limit, client):
         """Test that rate limiting is enforced"""
         # First set the mock to return False (rate limit exceeded)
@@ -262,7 +324,7 @@ class TestSecurityFeatures:
         audit = SecurityAudit(operation_name="Test Operation")
         
         # Test the audit
-        with patch('simplebank.api.security_deps.log_request') as mock_log:
+        with patch('simplebank.utils.security_deps.log_request') as mock_log:
             result = await audit(mock_request, mock_response)
             assert result == True
             mock_log.assert_called_once()
@@ -270,3 +332,74 @@ class TestSecurityFeatures:
             # Check security headers were added
             for header, value in SECURITY_HEADERS.items():
                 assert mock_response.headers.get(header) == value
+
+class TestPaginationFeatures:
+    def test_transaction_pagination_basic(self, client, sample_transactions):
+        """Test basic pagination of transactions endpoint"""
+        # Get the first account ID from the sample transactions
+        first_account_id = sample_transactions[0].from_account_id
+        print(f"\nTesting pagination for account ID: {first_account_id}")
+        
+        # Get first page
+        headers = {"X-API-Key": API_KEY}
+        response = client.get(f"/api/accounts/{first_account_id}/transactions?limit=10", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert "items" in data
+        assert "next_cursor" in data
+        assert len(data["items"]) == 10
+        
+        # Get second page using cursor
+        next_cursor = data["next_cursor"]
+        response2 = client.get(
+            f"/api/accounts/{first_account_id}/transactions?limit=10&cursor={next_cursor}",
+            headers=headers
+        )
+        assert response2.status_code == 200
+        data2 = response2.json()
+        
+        # Decode and print cursor contents for debugging
+        try:
+            decoded = base64.b64decode(next_cursor).decode('utf-8')
+            cursor_data = json.loads(decoded)
+            print(f"Decoded cursor: {cursor_data}")
+        except Exception as e:
+            print(f"Error decoding cursor: {e}")
+        
+        assert len(data2["items"]) == 10
+        
+        # Verify no duplicate transactions between pages
+        first_page_ids = {item["id"] for item in data["items"]}
+        second_page_ids = {item["id"] for item in data2["items"]}
+        assert not (first_page_ids & second_page_ids), "Found duplicate IDs between pages"
+
+
+    def test_transaction_pagination_last_page(self, client, sample_transactions):
+        """Test pagination behavior on the last page"""
+        first_account_id = sample_transactions[0].from_account_id
+        
+        headers = {"X-API-Key": API_KEY}
+        response = client.get(f"/api/accounts/{first_account_id}/transactions?limit=20", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        
+        next_cursor = data["next_cursor"]
+        assert next_cursor is not None
+        
+        # Get final page
+        response2 = client.get(
+            f"/api/accounts/{first_account_id}/transactions?limit=20&cursor={next_cursor}",
+            headers=headers
+        )
+        assert response2.status_code == 200
+        data2 = response2.json()
+        
+        # Should be less than full page and no next cursor
+        assert len(data2["items"]) < 20
+        assert data2["next_cursor"] is None
+        
+        # Verify we have exactly the expected number of items across all pages
+        total_items = len(data["items"]) + len(data2["items"])
+        assert total_items == 25, f"Expected 25 total items, got {total_items}"
+
