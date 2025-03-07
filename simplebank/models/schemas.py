@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
-from typing import List
+from typing import List, Optional, Any
 
 # Customer schemas
 class CustomerBase(BaseModel):
@@ -64,4 +64,56 @@ class TransactionWithAccounts(Transaction):
 
 class TransferHistoryResponse(BaseModel):
     account_id: int
-    transactions: List[Transaction] 
+    transactions: List[Transaction]
+
+# Response models for mobile API
+class BaseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+# Account response models for different detail levels
+class AccountMinimal(BaseResponse):
+    id: int
+    balance: float
+
+class AccountFull(AccountMinimal):
+    customer_id: int
+    created_at: datetime
+
+# Customer info for expansion
+class CustomerInfo(BaseResponse):
+    id: int
+    name: str
+
+# Transaction summary for expansion
+class TransactionSummary(BaseResponse):
+    id: int
+    amount: float
+    timestamp: datetime
+    is_credit: bool
+
+# Transaction response models
+class TransactionMinimal(BaseResponse):
+    id: int
+    amount: float
+    timestamp: datetime
+    is_credit: bool
+
+class TransactionFull(TransactionMinimal):
+    from_account_id: int
+    to_account_id: int
+
+class CounterpartyInfo(BaseResponse):
+    name: Optional[str]
+    account_id: int
+
+class TransactionResponse(TransactionFull):
+    counterparty: Optional[CounterpartyInfo] = None
+
+# Paginated response
+class PaginatedResponse(BaseModel):
+    items: List[Any]
+    next_cursor: Optional[str] = None
+    
+class PaginatedTransactions(PaginatedResponse):
+    items: List[TransactionResponse]
+    next_cursor: Optional[str] = None 

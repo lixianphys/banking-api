@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from typing import List
-from simplebank.api.security_deps import SecurityAudit,verify_api_key
+from simplebank.utils.security_deps import SecurityAudit,verify_api_key
 from simplebank.database import get_db
 from simplebank.models import models, schemas
 

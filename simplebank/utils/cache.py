@@ -8,7 +8,6 @@ import hashlib
 from typing import Any
 
 
-mobile_audit = SecurityAudit(operation_name="Mobile API audit")
 
 # Custom JSON encoder to handle datetime objects and Pydantic models
 class APIJSONEncoder(json.JSONEncoder):
