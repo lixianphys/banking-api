@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from simplebank.utils.security_deps import SecurityAudit,verify_api_key
+from simplebank.utils.security_deps import SecurityAudit
 from simplebank.database import get_db
 from simplebank.models import models, schemas
 
@@ -41,6 +41,12 @@ def read_customer(
 
 @router.post("/customers", response_model=schemas.Customer)
 def create_customer(customer: schemas.CustomerCreate, db: Session = Depends(get_db),audit: SecurityAudit = Depends(customer_audit)):
+    """
+    Create a new customer.
+    
+    Protected by API key via global dependency.
+    Audit logging via customer_audit dependency.
+    """
     db_customer = models.Customer(name=customer.name)
     db.add(db_customer)
     db.commit()

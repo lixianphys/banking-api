@@ -1,14 +1,13 @@
-from typing import TypeVar, Tuple, Optional, Any
+from typing import TypeVar, Tuple, Optional
 from sqlalchemy.orm import Query
-from sqlalchemy import desc, or_, and_
+from sqlalchemy import or_, and_
 from base64 import b64encode, b64decode
 import json
 from datetime import datetime
 from fastapi import Query
-from simplebank.models.schemas import PaginatedResponse
 from simplebank.models.models import Transaction
 
-T = TypeVar('T')
+T = TypeVar('T') # Generic type for the query results
 
 class PaginationField:
     """Configuration for pagination fields"""
@@ -84,7 +83,6 @@ def cursor_paginate(
 
     # Get one extra item to determine if there are more results
     items = query.limit(limit + 1).all()
-    print(f"Retrieved {len(items)} items")  # Debug print
     
     has_next = len(items) > limit
     items = items[:limit]
@@ -98,35 +96,6 @@ def cursor_paginate(
             value = getattr(last_item, field.field_name)
             cursor_values[field.field_name] = value
         next_cursor = encode_cursor(cursor_values)
-        print(f"Generated next cursor from values: {cursor_values}")  # Debug print
-    else:
-        print("No more pages available")  # Debug print
 
     return items, next_cursor
 
-async def paginate_query(
-    query: Query,
-    cursor: Optional[str] = Query(None, description="Pagination cursor"),
-    limit: int = Query(20, ge=1, le=100, description="Number of items per page"),
-    pagination_fields: list[PaginationField] = None,
-) -> PaginatedResponse:
-    """
-    Helper function to paginate a query in FastAPI endpoints
-    """
-    if pagination_fields is None:
-        pagination_fields = [
-            PaginationField("timestamp", is_timestamp=True),
-            PaginationField("id")
-        ]
-    
-    items, next_cursor = cursor_paginate(
-        query=query,
-        cursor=cursor,
-        limit=limit,
-        pagination_fields=pagination_fields
-    )
-    
-    return PaginatedResponse(
-        items=items,
-        next_cursor=next_cursor
-    )

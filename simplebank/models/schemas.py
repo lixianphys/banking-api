@@ -79,6 +79,11 @@ class AccountFull(AccountMinimal):
     customer_id: int
     created_at: datetime
 
+# Account response with optional expanded fields
+class AccountResponse(AccountFull):
+    customer: Optional[lambda: CustomerInfo] = None # lambda: CustomerInfo is a forward reference
+    recent_transactions: Optional[List[lambda: TransactionSummary]] = None # lambda: TransactionSummary is a forward reference
+
 # Customer info for expansion
 class CustomerInfo(BaseResponse):
     id: int

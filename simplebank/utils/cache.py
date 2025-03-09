@@ -2,15 +2,14 @@ from fastapi import Request, Response
 from datetime import datetime
 from pydantic import BaseModel
 
-from simplebank.utils.security_deps import SecurityAudit
 import json
 import hashlib
 from typing import Any
 
 
 
-# Custom JSON encoder to handle datetime objects and Pydantic models
 class APIJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle datetime objects and Pydantic models"""
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -18,7 +17,6 @@ class APIJSONEncoder(json.JSONEncoder):
             return obj.model_dump()  # For Pydantic v2
         return super().default(obj)
 
-    
 
 def generate_etag(data: Any) -> str:
     """Generate ETag from response data"""

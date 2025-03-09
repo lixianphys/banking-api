@@ -16,7 +16,7 @@ rate_limits: Dict[str, Dict[float, int]] = {}  # {ip: {timestamp: count}}
 RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))
 RATE_LIMIT_WINDOW = 60  # Window in seconds
 
-# Standard security headers
+# Standard security headers to prevent XSS attacks and cache attacks
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",

@@ -7,7 +7,7 @@ from simplebank.models import models, schemas
 from simplebank.utils.security_deps import SecurityAudit
 from simplebank.utils.cache import check_conditional_request
 from simplebank.models.schemas import (
-    AccountMinimal, AccountFull, CustomerInfo, TransactionSummary
+    AccountMinimal, AccountFull, CustomerInfo, TransactionSummary, AccountResponse, BalanceResponse
 )
 
 router = APIRouter()
@@ -16,6 +16,11 @@ read_account_audit = SecurityAudit(operation_name="Account API")
 
 @router.post("/accounts", response_model=schemas.Account)
 def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+    """
+    Create a new account for a customer.
+    Protected by API key via global dependency.
+    Audit logging via read_account_audit dependency.
+    """
     # Check if customer exists
     customer = db.query(models.Customer).filter(models.Customer.id == account.customer_id).first()
     if not customer:
@@ -34,6 +39,11 @@ def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db)
 
 @router.get("/accounts", response_model=List[schemas.Account])
 def read_accounts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+    """
+    Get all accounts.
+    Protected by API key via global dependency.
+    Audit logging via read_account_audit dependency.
+    """
     accounts = db.query(models.Account).offset(skip).limit(limit).all()
     return accounts
 
@@ -52,7 +62,9 @@ def read_account(
     audit: SecurityAudit = Depends(read_account_audit)
 ):
     """
-    Get account details with configurable response format.
+    Get account details with configurable response format. This endpoint supports caching.
+    Protected by API key via global dependency.
+    Audit logging via read_account_audit dependency.
     """
     account = db.query(models.Account).filter(models.Account.id == account_id).first()
     if account is None:
@@ -117,15 +129,25 @@ def read_account(
     else:
         return AccountResponse(**response_data)
 
-@router.get("/accounts/{account_id}/balance", response_model=schemas.BalanceResponse)
+@router.get("/accounts/{account_id}/balance", response_model=BalanceResponse)
 def read_account_balance(account_id: int, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+    """
+    Get the balance of an account.
+    Protected by API key via global dependency.
+    Audit logging via read_account_audit dependency.
+    """
     account = db.query(models.Account).filter(models.Account.id == account_id).first()
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    return {"account_id": account_id, "balance": account.balance}
+    return BalanceResponse(account_id=account_id, balance=account.balance)
 
 @router.get("/customers/{customer_id}/accounts", response_model=List[schemas.Account])
 def read_customer_accounts(customer_id: int, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+    """
+    Get all accounts for a customer.    
+    Protected by API key via global dependency.
+    Audit logging via read_account_audit dependency.
+    """
     # Check if customer exists
     customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
     if not customer:

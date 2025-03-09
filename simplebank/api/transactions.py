@@ -6,12 +6,20 @@ from sqlalchemy import or_
 from simplebank.database import get_db
 from simplebank.models import models, schemas
 from simplebank.utils.security_deps import SecurityAudit
+from simplebank.utils.cache import check_conditional_request
+from simplebank.utils.pagination import cursor_paginate, PaginationField
+from simplebank.models.schemas import TransactionResponse, CounterpartyInfo
 
 router = APIRouter()
 transaction_audit = SecurityAudit(operation_name="Transaction API")
 
 @router.post("/transactions", response_model=schemas.Transaction,dependencies=[Depends(transaction_audit)])
 def create_transaction(transaction: schemas.TransactionCreate, db: Session = Depends(get_db)):
+    """
+    Create a new transaction.
+    Protected by API key via global dependency.
+    Audit logging via transaction_audit dependency.
+    """
     # Check if both accounts exist``
     from_account = db.query(models.Account).filter(models.Account.id == transaction.from_account_id).first()
     to_account = db.query(models.Account).filter(models.Account.id == transaction.to_account_id).first()
@@ -44,6 +52,11 @@ def create_transaction(transaction: schemas.TransactionCreate, db: Session = Dep
 
 @router.get("/transactions", response_model=List[schemas.Transaction],dependencies=[Depends(transaction_audit)])
 def read_transactions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """
+    Get all transactions.
+    Protected by API key via global dependency.
+    Audit logging via transaction_audit dependency.
+    """
     transactions = db.query(models.Transaction).offset(skip).limit(limit).all()
     return transactions
 
@@ -64,6 +77,9 @@ async def get_account_transactions(
 ):
     """
     Get transactions with configurable response format and pagination.
+    This endpoint supports caching.
+    Protected by API key via global dependency.
+    Audit logging via transaction_audit dependency.
     """
     # First verify account exists
     account = db.query(models.Account).filter(models.Account.id == account_id).first()
@@ -83,7 +99,6 @@ async def get_account_transactions(
     print(f"Base query count: {base_query.count()}")
 
     # Apply cursor-based pagination
-    from simplebank.utils.pagination import cursor_paginate, PaginationField
     transactions, next_cursor = cursor_paginate(
         query=base_query,
         cursor=cursor,
@@ -97,7 +112,6 @@ async def get_account_transactions(
     print(f"Returned transactions count: {len(transactions)}")
 
     # Format transactions based on detail level
-    from simplebank.models.schemas import TransactionResponse, CounterpartyInfo
     results = []
     for tx in transactions:
         tx_data = {
@@ -130,8 +144,7 @@ async def get_account_transactions(
                 )
 
         results.append(TransactionResponse(**tx_data))
-
-    from simplebank.utils.cache import check_conditional_request
+    
     response_data = schemas.PaginatedTransactions(
         items=results,
         next_cursor=next_cursor

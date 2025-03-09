@@ -8,6 +8,10 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Lifespan for the FastAPI app.
+    This is used to initialize the database and customers.
+    """
     # Startup code
     db = SessionLocal()
     init_db()
@@ -26,7 +30,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
