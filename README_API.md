@@ -39,7 +39,7 @@ You can access the interactive API documentation at: http://localhost:8000/docs
 
 To run the tests:
 ```bash
-pytest app/tests/
+pytest simplebank/tests/
 ```
 
 ## API Endpoints

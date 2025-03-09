@@ -3,18 +3,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from unittest.mock import patch, MagicMock
+import time
+from datetime import datetime, timedelta
+import base64
+import json
 
 from simplebank.database import get_db
 from simplebank.models.models import Base
 from simplebank.models import models
 from simplebank.utils.security_deps import API_KEY, SECURITY_HEADERS, SecurityAudit
 from simplebank.main import app
-from simplebank.init_db import init_customers
-from unittest.mock import patch, MagicMock
-import time
-from datetime import datetime, timedelta
-import base64
-import json
+from simplebank.utils.init_db import init_customers
+
 
 # Use in-memory SQLite for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"

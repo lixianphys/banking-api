@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from simplebank.api import customers,accounts,transactions   
 from simplebank.utils.security_deps import verify_api_key
-from simplebank.init_db import init_db, init_customers
+from simplebank.utils.init_db import init_db, init_customers
 from simplebank.database import SessionLocal
 from contextlib import asynccontextmanager
 
@@ -20,7 +20,7 @@ app = FastAPI(
     title="Simple Banking API",
     description="A simple banking API for managing accounts and transactions",
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Configure CORS
