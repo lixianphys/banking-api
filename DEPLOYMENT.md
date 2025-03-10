@@ -1,6 +1,6 @@
 # SimpleBank API Deployment Guide
 
-This guide explains how to deploy the SimpleBank API using Docker and Kubernetes.
+This guide explains how to deploy the SimpleBank API using Docker.
 
 ## Prerequisites
 

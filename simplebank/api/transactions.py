@@ -77,7 +77,7 @@ async def get_account_transactions(
 ):
     """
     Get transactions with configurable response format and pagination.
-    This endpoint supports caching.
+    This endpoint supports caching and pagination.
     Protected by API key via global dependency.
     Audit logging via transaction_audit dependency.
     """
