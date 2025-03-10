@@ -62,7 +62,8 @@ def read_account(
     audit: SecurityAudit = Depends(read_account_audit)
 ):
     """
-    Get account details with configurable response format. This endpoint supports caching.
+    Get account details with configurable response format. 
+    This endpoint supports caching and pagination.
     Protected by API key via global dependency.
     Audit logging via read_account_audit dependency.
     """
