@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import or_
-
-from simplebank.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from simplebank.database import get_db, get_db_async
 from simplebank.models import models, schemas
 from simplebank.utils.security_deps import SecurityAudit
 from simplebank.utils.cache import check_conditional_request
@@ -14,15 +14,15 @@ router = APIRouter()
 transaction_audit = SecurityAudit(operation_name="Transaction API")
 
 @router.post("/transactions", response_model=schemas.Transaction,dependencies=[Depends(transaction_audit)])
-def create_transaction(transaction: schemas.TransactionCreate, db: Session = Depends(get_db)):
+async def create_transaction(transaction: schemas.TransactionCreate, db: AsyncSession = Depends(get_db_async)):
     """
-    Create a new transaction.
+    Create a new transaction with async db
     Protected by API key via global dependency.
     Audit logging via transaction_audit dependency.
     """
     # Check if both accounts exist``
-    from_account = db.query(models.Account).filter(models.Account.id == transaction.from_account_id).first()
-    to_account = db.query(models.Account).filter(models.Account.id == transaction.to_account_id).first()
+    from_account = await db.get(models.Account, transaction.from_account_id, with_for_update=True)
+    to_account = await db.get(models.Account, transaction.to_account_id, with_for_update=True)
     
     if not from_account:
         raise HTTPException(status_code=404, detail="Source account not found")
@@ -45,10 +45,14 @@ def create_transaction(transaction: schemas.TransactionCreate, db: Session = Dep
     )
     
     db.add(db_transaction)
-    db.commit()
-    db.refresh(db_transaction)
-    
-    return db_transaction
+
+    try:
+        await db.commit()
+        # await db.refresh(db_transaction)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"message": "Transaction created successfully"}
 
 @router.get("/transactions", response_model=List[schemas.Transaction],dependencies=[Depends(transaction_audit)])
 def read_transactions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -82,7 +86,7 @@ async def get_account_transactions(
     Audit logging via transaction_audit dependency.
     """
     # First verify account exists
-    account = db.query(models.Account).filter(models.Account.id == account_id).first()
+    account = db.get(models.Account, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 

@@ -34,7 +34,7 @@ def read_customer(
     Protected by API key via global dependency.
     Audit logging via customer_audit dependency.
     """
-    customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+    customer = db.get(models.Customer, customer_id)
     if customer is None:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
@@ -51,5 +51,5 @@ def create_customer(customer: schemas.CustomerCreate, db: Session = Depends(get_
     db.add(db_customer)
     db.commit()
     db.refresh(db_customer)
-    return db_customer
+    return {"message": "Customer created successfully"}
 

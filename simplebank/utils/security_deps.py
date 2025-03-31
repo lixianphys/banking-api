@@ -9,7 +9,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-API_KEY = os.getenv("API_KEY", "default_secret_key")
+API_KEY = os.getenv("API_KEY", "dev_api_key")
 
 # Simple in-memory rate limiting
 rate_limits: Dict[str, Dict[float, int]] = {}  # {ip: {timestamp: count}}
@@ -18,6 +18,7 @@ RATE_LIMIT_WINDOW = 60  # Window in seconds
 
 # Standard security headers to prevent XSS attacks and cache attacks
 SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "X-XSS-Protection": "1; mode=block",

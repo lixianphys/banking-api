@@ -22,7 +22,7 @@ def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db)
     Audit logging via read_account_audit dependency.
     """
     # Check if customer exists
-    customer = db.query(models.Customer).filter(models.Customer.id == account.customer_id).first()
+    customer = db.get(models.Customer, account.customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
@@ -35,7 +35,7 @@ def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
-    return db_account
+    return {"message": "Account created successfully"}
 
 @router.get("/accounts", response_model=List[schemas.Account])
 def read_accounts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
@@ -67,7 +67,7 @@ def read_account(
     Protected by API key via global dependency.
     Audit logging via read_account_audit dependency.
     """
-    account = db.query(models.Account).filter(models.Account.id == account_id).first()
+    account = db.get(models.Account, account_id)
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
     
@@ -137,7 +137,7 @@ def read_account_balance(account_id: int, db: Session = Depends(get_db),audit: S
     Protected by API key via global dependency.
     Audit logging via read_account_audit dependency.
     """
-    account = db.query(models.Account).filter(models.Account.id == account_id).first()
+    account = db.get(models.Account, account_id)
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
     return BalanceResponse(account_id=account_id, balance=account.balance)
@@ -150,7 +150,7 @@ def read_customer_accounts(customer_id: int, db: Session = Depends(get_db),audit
     Audit logging via read_account_audit dependency.
     """
     # Check if customer exists
-    customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+    customer = db.get(models.Customer, customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
