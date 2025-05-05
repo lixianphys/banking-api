@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from simplebank.database import get_db, get_db_async
@@ -13,7 +13,7 @@ from simplebank.models.schemas import TransactionResponse, CounterpartyInfo
 router = APIRouter()
 transaction_audit = SecurityAudit(operation_name="Transaction API")
 
-@router.post("/transactions", response_model=schemas.Transaction,dependencies=[Depends(transaction_audit)])
+@router.post("/transactions", response_model=Dict[str, str],dependencies=[Depends(transaction_audit)])
 async def create_transaction(transaction: schemas.TransactionCreate, db: AsyncSession = Depends(get_db_async)):
     """
     Create a new transaction with async db

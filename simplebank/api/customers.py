@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict
 from simplebank.utils.security_deps import SecurityAudit
 from simplebank.database import get_db
 from simplebank.models import models, schemas
@@ -39,7 +39,7 @@ def read_customer(
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
 
-@router.post("/customers", response_model=schemas.Customer)
+@router.post("/customers", response_model=Dict[str, str])
 def create_customer(customer: schemas.CustomerCreate, db: Session = Depends(get_db),audit: SecurityAudit = Depends(customer_audit)):
     """
     Create a new customer.

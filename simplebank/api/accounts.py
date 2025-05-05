@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from sqlalchemy.orm import Session
-from typing import List, Union
+from typing import List, Union, Dict
 
 from simplebank.database import get_db
 from simplebank.models import models, schemas
@@ -14,7 +14,7 @@ router = APIRouter()
 read_account_audit = SecurityAudit(operation_name="Account API")
 
 
-@router.post("/accounts", response_model=schemas.Account)
+@router.post("/accounts", response_model=Dict[str, str])
 def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
     """
     Create a new account for a customer.
