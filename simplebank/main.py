@@ -4,20 +4,35 @@ from simplebank.api import customers,accounts,transactions,auth
 from simplebank.utils.security_deps import verify_api_key
 from simplebank.utils.init_db import init_db, init_customers
 from simplebank.database import SessionLocal
+from simplebank.utils.redis_client import get_redis_client, close_redis
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Lifespan for the FastAPI app.
-    This is used to initialize the database and customers.
+    This is used to initialize the database, customers, and Redis.
     """
     # Startup code
     db = SessionLocal()
     init_db()
     init_customers(db)
+    db.close()
+    
+    # Initialize Redis connection
+    try:
+        get_redis_client()
+    except Exception as e:
+        # Log error but don't fail startup if Redis is unavailable
+        # The app can still run without Redis (with degraded functionality)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Redis connection failed: {e}. App will continue without Redis caching.")
+    
     yield
-    # Shutdown code (if needed)
+    
+    # Shutdown code
+    close_redis()
     
 
 app = FastAPI(

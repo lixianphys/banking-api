@@ -457,3 +457,26 @@ class TestRedisRateLimiting:
         response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
         assert response.status_code != 429
 
+
+class TestApplicationLifecycle:
+    """Test application startup and shutdown"""
+    
+    def test_auth_router_registered(self, client, test_db):
+        """Test that auth router is registered"""
+        # Test that auth endpoints are available
+        response = client.get("/api/auth/me")
+        # Should return 401 (not 404), meaning endpoint exists
+        assert response.status_code == 401
+    
+    def test_redis_initialization(self):
+        """Test that Redis can be initialized"""
+        from simplebank.utils.redis_client import get_redis_client, close_redis
+        from unittest.mock import patch, MagicMock
+        
+        # Mock Redis client
+        mock_redis = MagicMock()
+        with patch('simplebank.utils.redis_client.redis.Redis', return_value=mock_redis):
+            client = get_redis_client()
+            assert client is not None
+            close_redis()
+
