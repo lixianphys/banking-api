@@ -1,21 +1,34 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from sqlalchemy.orm import Session
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Optional
+import json
+import os
 
 from simplebank.database import get_db
 from simplebank.models import models, schemas
-from simplebank.utils.security_deps import SecurityAudit
+from simplebank.models.models import User
+from simplebank.utils.security_deps import SecurityAudit, verify_jwt_token
 from simplebank.utils.cache import check_conditional_request
+from simplebank.utils.redis_cache import (
+    get_cache_key, get_cached_response, set_cached_response, invalidate_user_cache
+)
 from simplebank.models.schemas import (
     AccountMinimal, AccountFull, CustomerInfo, TransactionSummary, AccountResponse, BalanceResponse
 )
+
+CACHE_TTL_ACCOUNTS = int(os.getenv("CACHE_TTL_ACCOUNTS", "60"))
 
 router = APIRouter()
 read_account_audit = SecurityAudit(operation_name="Account API")
 
 
 @router.post("/accounts", response_model=Dict[str, str])
-def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+def create_account(
+    account: schemas.AccountCreate,
+    db: Session = Depends(get_db),
+    audit: SecurityAudit = Depends(read_account_audit),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
+):
     """
     Create a new account for a customer.
     Protected by API key via global dependency.
@@ -35,17 +48,41 @@ def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
+    
+    # Invalidate cache for customer's accounts
+    invalidate_user_cache(account.customer_id, endpoint="/api/accounts")
+    
     return {"message": "Account created successfully"}
 
 @router.get("/accounts", response_model=List[schemas.Account])
-def read_accounts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+def read_accounts(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    audit: SecurityAudit = Depends(read_account_audit),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
+):
     """
     Get all accounts.
     Protected by API key via global dependency.
     Audit logging via read_account_audit dependency.
     """
+    user_id = jwt_user.id if jwt_user else None
+    cache_key = get_cache_key("/api/accounts", {"skip": skip, "limit": limit}, user_id=user_id)
+    
+    # Try to get from cache
+    cached_data = get_cached_response(cache_key)
+    if cached_data is not None:
+        return cached_data
+    
+    # Query database
     accounts = db.query(models.Account).offset(skip).limit(limit).all()
-    return accounts
+    accounts_data = [schemas.Account.model_validate(acc) for acc in accounts]
+    
+    # Cache the response
+    set_cached_response(cache_key, [acc.model_dump() for acc in accounts_data], ttl=CACHE_TTL_ACCOUNTS)
+    
+    return accounts_data
 
 @router.get(
     "/accounts/{account_id}",
@@ -59,7 +96,8 @@ def read_account(
     detail_level: str = Query("full", pattern="^(minimal|full)$"),
     expand: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
-    audit: SecurityAudit = Depends(read_account_audit)
+    audit: SecurityAudit = Depends(read_account_audit),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
 ):
     """
     Get account details with configurable response format. 
@@ -67,6 +105,24 @@ def read_account(
     Protected by API key via global dependency.
     Audit logging via read_account_audit dependency.
     """
+    user_id = jwt_user.id if jwt_user else None
+    cache_key = get_cache_key(
+        f"/api/accounts/{account_id}",
+        {"detail_level": detail_level, "expand": expand},
+        user_id=user_id
+    )
+    
+    # Try to get from cache
+    cached_data = get_cached_response(cache_key)
+    if cached_data is not None:
+        # Return cached response (already serialized)
+        if detail_level == "minimal":
+            return AccountMinimal(**cached_data)
+        elif detail_level == "full" and not expand:
+            return AccountFull(**cached_data)
+        else:
+            return AccountResponse(**cached_data)
+    
     account = db.get(models.Account, account_id)
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -122,6 +178,9 @@ def read_account(
     else:
         response.headers["Cache-Control"] = "private, max-age=30"
 
+    # Cache the response
+    set_cached_response(cache_key, response_data, ttl=CACHE_TTL_ACCOUNTS)
+
     # Return appropriate response model based on detail level
     if detail_level == "minimal":
         return AccountMinimal(**response_data)
@@ -131,28 +190,65 @@ def read_account(
         return AccountResponse(**response_data)
 
 @router.get("/accounts/{account_id}/balance", response_model=BalanceResponse)
-def read_account_balance(account_id: int, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+def read_account_balance(
+    account_id: int,
+    db: Session = Depends(get_db),
+    audit: SecurityAudit = Depends(read_account_audit),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
+):
     """
     Get the balance of an account.
     Protected by API key via global dependency.
     Audit logging via read_account_audit dependency.
     """
+    user_id = jwt_user.id if jwt_user else None
+    cache_key = get_cache_key(f"/api/accounts/{account_id}/balance", {}, user_id=user_id)
+    
+    # Try to get from cache
+    cached_data = get_cached_response(cache_key)
+    if cached_data is not None:
+        return BalanceResponse(**cached_data)
+    
     account = db.get(models.Account, account_id)
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
-    return BalanceResponse(account_id=account_id, balance=account.balance)
+    
+    balance_data = {"account_id": account_id, "balance": account.balance}
+    
+    # Cache the response
+    set_cached_response(cache_key, balance_data, ttl=CACHE_TTL_ACCOUNTS)
+    
+    return BalanceResponse(**balance_data)
 
 @router.get("/customers/{customer_id}/accounts", response_model=List[schemas.Account])
-def read_customer_accounts(customer_id: int, db: Session = Depends(get_db),audit: SecurityAudit = Depends(read_account_audit)):
+def read_customer_accounts(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    audit: SecurityAudit = Depends(read_account_audit),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
+):
     """
     Get all accounts for a customer.    
     Protected by API key via global dependency.
     Audit logging via read_account_audit dependency.
     """
+    user_id = jwt_user.id if jwt_user else None
+    cache_key = get_cache_key(f"/api/customers/{customer_id}/accounts", {}, user_id=user_id)
+    
+    # Try to get from cache
+    cached_data = get_cached_response(cache_key)
+    if cached_data is not None:
+        return [schemas.Account(**acc) for acc in cached_data]
+    
     # Check if customer exists
     customer = db.get(models.Customer, customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
     accounts = db.query(models.Account).filter(models.Account.customer_id == customer_id).all()
-    return accounts 
+    accounts_data = [schemas.Account.model_validate(acc) for acc in accounts]
+    
+    # Cache the response
+    set_cached_response(cache_key, [acc.model_dump() for acc in accounts_data], ttl=CACHE_TTL_ACCOUNTS)
+    
+    return accounts_data 

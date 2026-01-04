@@ -3,18 +3,30 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
+import os
+
 from simplebank.database import get_db, get_db_async
 from simplebank.models import models, schemas
-from simplebank.utils.security_deps import SecurityAudit
+from simplebank.models.models import User
+from simplebank.utils.security_deps import SecurityAudit, verify_jwt_token
 from simplebank.utils.cache import check_conditional_request
 from simplebank.utils.pagination import cursor_paginate, PaginationField
+from simplebank.utils.redis_cache import (
+    get_cache_key, get_cached_response, set_cached_response, invalidate_user_cache
+)
 from simplebank.models.schemas import TransactionResponse, CounterpartyInfo
+
+CACHE_TTL_TRANSACTIONS = int(os.getenv("CACHE_TTL_TRANSACTIONS", "30"))
 
 router = APIRouter()
 transaction_audit = SecurityAudit(operation_name="Transaction API")
 
 @router.post("/transactions", response_model=Dict[str, str],dependencies=[Depends(transaction_audit)])
-async def create_transaction(transaction: schemas.TransactionCreate, db: AsyncSession = Depends(get_db_async)):
+async def create_transaction(
+    transaction: schemas.TransactionCreate,
+    db: AsyncSession = Depends(get_db_async),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
+):
     """
     Create a new transaction with async db
     Protected by API key via global dependency.
@@ -52,17 +64,40 @@ async def create_transaction(transaction: schemas.TransactionCreate, db: AsyncSe
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+    # Invalidate cache for both accounts' transactions and balances
+    invalidate_user_cache(transaction.from_account_id, endpoint="/api/accounts")
+    invalidate_user_cache(transaction.to_account_id, endpoint="/api/accounts")
+    
     return {"message": "Transaction created successfully"}
 
 @router.get("/transactions", response_model=List[schemas.Transaction],dependencies=[Depends(transaction_audit)])
-def read_transactions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_transactions(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
+):
     """
     Get all transactions.
     Protected by API key via global dependency.
     Audit logging via transaction_audit dependency.
     """
+    user_id = jwt_user.id if jwt_user else None
+    cache_key = get_cache_key("/api/transactions", {"skip": skip, "limit": limit}, user_id=user_id)
+    
+    # Try to get from cache
+    cached_data = get_cached_response(cache_key)
+    if cached_data is not None:
+        return [schemas.Transaction(**tx) for tx in cached_data]
+    
     transactions = db.query(models.Transaction).offset(skip).limit(limit).all()
-    return transactions
+    transactions_data = [schemas.Transaction.model_validate(tx) for tx in transactions]
+    
+    # Cache the response
+    set_cached_response(cache_key, [tx.model_dump() for tx in transactions_data], ttl=CACHE_TTL_TRANSACTIONS)
+    
+    return transactions_data
 
 @router.get(
     "/accounts/{account_id}/transactions", 
@@ -77,7 +112,8 @@ async def get_account_transactions(
     limit: int = Query(20, ge=1, le=100),
     expand: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
-    audit: SecurityAudit = Depends(transaction_audit)
+    audit: SecurityAudit = Depends(transaction_audit),
+    jwt_user: Optional[User] = Depends(verify_jwt_token)
 ):
     """
     Get transactions with configurable response format and pagination.
@@ -85,6 +121,19 @@ async def get_account_transactions(
     Protected by API key via global dependency.
     Audit logging via transaction_audit dependency.
     """
+    user_id = jwt_user.id if jwt_user else None
+    cache_key = get_cache_key(
+        f"/api/accounts/{account_id}/transactions",
+        {"detail_level": detail_level, "cursor": cursor, "limit": limit, "expand": expand},
+        user_id=user_id
+    )
+    
+    # Try to get from cache (only if no cursor, as paginated results are dynamic)
+    if cursor is None:
+        cached_data = get_cached_response(cache_key)
+        if cached_data is not None:
+            return schemas.PaginatedTransactions(**cached_data)
+    
     # First verify account exists
     account = db.get(models.Account, account_id)
     if not account:
@@ -158,6 +207,10 @@ async def get_account_transactions(
     if check_conditional_request(request, response, response_data):
         response.status_code = 304
         return response_data
+
+    # Cache the response (only first page without cursor)
+    if cursor is None:
+        set_cached_response(cache_key, response_data.model_dump(), ttl=CACHE_TTL_TRANSACTIONS)
 
     response.headers["Cache-Control"] = "private, max-age=30"
     return response_data 
