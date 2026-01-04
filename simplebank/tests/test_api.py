@@ -404,3 +404,56 @@ class TestPaginationFeatures:
         total_items = len(data["items"]) + len(data2["items"])
         assert total_items == 25, f"Expected 25 total items, got {total_items}"
 
+
+class TestJWTAuthentication:
+    """Test JWT authentication integration"""
+    
+    def test_jwt_verification_works(self, client, test_db):
+        """Test that JWT verification function works"""
+        from simplebank.utils.jwt_utils import create_access_token, verify_token
+        
+        # Create a test token
+        token_data = {"sub": "testuser", "user_id": 1}
+        access_token = create_access_token(token_data)
+        
+        # Verify the token
+        token_info = verify_token(access_token, token_type="access")
+        assert token_info is not None
+        assert token_info.username == "testuser"
+        assert token_info.user_id == 1
+    
+    def test_jwt_token_blacklist_integration(self, client, test_db):
+        """Test that blacklisted JWT tokens are rejected in security deps"""
+        from simplebank.utils.jwt_utils import create_access_token
+        from simplebank.utils.redis_token_store import add_to_blacklist, is_token_blacklisted
+        
+        # Create a test token
+        token_data = {"sub": "testuser", "user_id": 1}
+        access_token = create_access_token(token_data)
+        
+        # Blacklist the token
+        add_to_blacklist(access_token, 3600)
+        
+        # Verify it's blacklisted
+        assert is_token_blacklisted(access_token) is True
+
+
+class TestRedisRateLimiting:
+    """Test Redis-based rate limiting"""
+    
+    @patch('simplebank.utils.security_deps.check_rate_limit_redis')
+    def test_redis_rate_limiting_enforced(self, mock_check_rate_limit, client):
+        """Test that Redis rate limiting is enforced"""
+        # Mock rate limit exceeded
+        mock_check_rate_limit.return_value = False
+        
+        response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
+        assert response.status_code == 429
+        assert "Rate limit exceeded" in response.json()["detail"]
+        
+        # Mock rate limit OK
+        mock_check_rate_limit.return_value = True
+        
+        response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
+        assert response.status_code != 429
+

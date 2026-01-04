@@ -8,7 +8,7 @@ import fakeredis
 from typing import Generator
 
 from simplebank.database import get_db
-from simplebank.models.models import Base
+from simplebank.models.models import Base, User  # Import User to ensure table is created
 from simplebank.main import app
 
 # Use in-memory SQLite for testing

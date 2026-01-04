@@ -1,20 +1,27 @@
-from fastapi import Request, Response, HTTPException, Header, status
+from fastapi import Request, Response, HTTPException, Header, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 import time
 import secrets
 from typing import Dict, Optional
 import logging
+from sqlalchemy.orm import Session
+
+from simplebank.database import get_db
+from simplebank.utils.jwt_utils import verify_token, get_current_user as get_user_from_token
+from simplebank.utils.redis_token_store import is_token_blacklisted
+from simplebank.utils.redis_rate_limit import check_rate_limit_redis
+from simplebank.models.models import User
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 API_KEY = os.getenv("API_KEY", "dev_api_key")
-
-# Simple in-memory rate limiting
-rate_limits: Dict[str, Dict[float, int]] = {}  # {ip: {timestamp: count}}
 RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))
 RATE_LIMIT_WINDOW = 60  # Window in seconds
+
+security = HTTPBearer(auto_error=False)
 
 # Standard security headers to prevent XSS attacks and cache attacks
 SECURITY_HEADERS = {
@@ -27,36 +34,37 @@ SECURITY_HEADERS = {
 }
 
 def check_rate_limit(ip: str) -> bool:
-    """Check if IP is within rate limits"""
-    now = time.time()
+    """Check if IP is within rate limits using Redis"""
+    return check_rate_limit_redis(ip, max_requests=RATE_LIMIT_MAX, window=RATE_LIMIT_WINDOW)
+
+
+async def verify_jwt_token(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """
+    Dependency for JWT token verification.
+    Returns User if token is valid, None otherwise.
+    """
+    if credentials is None:
+        return None
     
-    # Initialize if this is the first request from this IP
-    if ip not in rate_limits:
-        rate_limits[ip] = {}
+    token = credentials.credentials
     
-    # Clean up old entries (older than window)
-    rate_limits[ip] = {ts: count for ts, count in rate_limits[ip].items() 
-                      if now - ts < RATE_LIMIT_WINDOW}
+    # Check if token is blacklisted
+    if is_token_blacklisted(token):
+        logger.warning("Blacklisted token attempted access")
+        return None
     
-    # Calculate total requests in current window
-    total_requests = sum(rate_limits[ip].values())
-    
-    # Check if limit exceeded
-    if total_requests >= RATE_LIMIT_MAX:
-        return False
-    
-    # Record this request
-    if now not in rate_limits[ip]:
-        rate_limits[ip][now] = 0
-    rate_limits[ip][now] += 1
-    
-    return True
+    # Verify token and get user
+    user = get_user_from_token(token, db)
+    return user
 
 
 async def verify_api_key(
     request: Request,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key")
-) -> str:
+) -> Optional[str]:
     """Dependency for API key verification"""
     # Skip for OPTIONS requests (CORS preflight)
     if request.method == "OPTIONS":
@@ -86,6 +94,33 @@ async def verify_api_key(
     request.state.start_time = time.time()
     
     return x_api_key
+
+
+async def get_current_user_optional(
+    request: Request,
+    jwt_user: Optional[User] = Depends(verify_jwt_token),
+    api_key: Optional[str] = Depends(verify_api_key)
+) -> Optional[User]:
+    """
+    Dependency that accepts either JWT or API key authentication.
+    Returns User if JWT is provided, None if API key is used.
+    """
+    # If JWT user is provided, use it
+    if jwt_user is not None:
+        # Store start time for timing requests
+        request.state.start_time = time.time()
+        return jwt_user
+    
+    # If API key is provided, return None (API key auth doesn't have a user)
+    if api_key is not None:
+        return None
+    
+    # Neither authentication method provided
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 def generate_api_key() -> str:
     """Generate a secure API key"""
