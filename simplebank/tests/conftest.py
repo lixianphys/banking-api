@@ -15,16 +15,19 @@ from simplebank.utils.jwt_utils import create_access_token
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Use in-memory SQLite for testing
+# Use in-memory SQLite for testing with shared connection
+# Using file-based in-memory SQLite to ensure all connections see the same database
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
+# Create engine with StaticPool to ensure single connection
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool
+    poolclass=StaticPool,
+    pool_pre_ping=True
 )
 
-TestingSessionLocal = sessionmaker(bind=engine)
+TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
 # Override the get_db dependency for testing
@@ -71,26 +74,32 @@ def db_session():
 
 
 @pytest.fixture
-def test_user(test_db):
-    """Create a test user and return user object and JWT token"""
+def test_user(test_db, client):
+    """Create a test user via API and return user object and JWT token"""
+    # Register user via API to ensure it's in the same database session
+    register_data = {
+        "username": "testuser",
+        "email": "test@example.com",
+        "password": "testpassword123"
+    }
+    register_response = client.post("/api/auth/register", json=register_data)
+    assert register_response.status_code == 201
+    
+    # Login to get token
+    login_data = {
+        "username": "testuser",
+        "password": "testpassword123"
+    }
+    login_response = client.post("/api/auth/login", json=login_data)
+    assert login_response.status_code == 200
+    tokens = login_response.json()
+    access_token = tokens["access_token"]
+    
+    # Get user from database
     db = TestingSessionLocal()
     try:
-        # Create test user directly in database
-        hashed_password = pwd_context.hash("testpassword123")
-        user = User(
-            username="testuser",
-            email="test@example.com",
-            hashed_password=hashed_password,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        
-        # Create JWT token
-        token_data = {"sub": user.username, "user_id": user.id}
-        access_token = create_access_token(token_data)
-        
+        user = db.query(User).filter(User.username == "testuser").first()
+        assert user is not None
         yield user, access_token
     finally:
         db.close()
