@@ -6,14 +6,14 @@ import time
 from simplebank.main import app
 from simplebank.tests.conftest import test_db, TestingSessionLocal
 from simplebank.models.models import User, Customer, Account, Transaction
-from simplebank.utils.security_deps import API_KEY
+# API_KEY removed - using JWT authentication
 from simplebank.utils.redis_cache import get_cache_key, get_cached_response, set_cached_response
 
 
 class TestCaching:
     """Test Redis caching integration in API endpoints"""
 
-    def test_account_cache_hit(self, client, test_db, mock_redis):
+    def test_account_cache_hit(self, client, test_db, mock_redis, auth_headers):
         """Test that cached account responses are returned"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # Create an account first
@@ -34,19 +34,19 @@ class TestCaching:
             # First request - should query database
             response1 = client.get(
                 f"/api/accounts/{account.id}",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response1.status_code == 200
             
             # Second request - should use cache
             response2 = client.get(
                 f"/api/accounts/{account.id}",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response2.status_code == 200
             assert response1.json() == response2.json()
 
-    def test_account_cache_miss(self, client, test_db, mock_redis):
+    def test_account_cache_miss(self, client, test_db, mock_redis, auth_headers):
         """Test that cache miss queries database"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             customer = Customer(name="Test Customer")
@@ -66,13 +66,13 @@ class TestCaching:
             # Request should query database (cache miss)
             response = client.get(
                 f"/api/accounts/{account.id}",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response.status_code == 200
             data = response.json()
             assert data["balance"] == 500.0
 
-    def test_cache_invalidation_on_create(self, client, test_db, mock_redis):
+    def test_cache_invalidation_on_create(self, client, test_db, mock_redis, auth_headers):
         """Test that cache is invalidated when account is created"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             customer = Customer(name="Test Customer")
@@ -87,7 +87,7 @@ class TestCaching:
             # Get customer accounts (should be cached)
             response1 = client.get(
                 f"/api/customers/{customer.id}/accounts",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response1.status_code == 200
             initial_count = len(response1.json())
@@ -96,14 +96,14 @@ class TestCaching:
             response2 = client.post(
                 "/api/accounts",
                 json={"customer_id": customer.id, "initial_deposit": 200.0},
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response2.status_code == 200
             
             # Get customer accounts again - should reflect new account
             response3 = client.get(
                 f"/api/customers/{customer.id}/accounts",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response3.status_code == 200
             # Cache should be invalidated, so we get fresh data
@@ -136,25 +136,25 @@ class TestCaching:
         assert key1 != key3
         assert key2 != key3
 
-    def test_customer_list_caching(self, client, test_db, mock_redis):
+    def test_customer_list_caching(self, client, test_db, mock_redis, auth_headers):
         """Test that customer list is cached"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # First request
             response1 = client.get(
                 "/api/customers",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response1.status_code == 200
             
             # Second request - should use cache
             response2 = client.get(
                 "/api/customers",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response2.status_code == 200
             assert response1.json() == response2.json()
 
-    def test_transaction_cache(self, client, test_db, mock_redis):
+    def test_transaction_cache(self, client, test_db, mock_redis, auth_headers):
         """Test that transactions are cached"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             customer1 = Customer(name="Customer 1")
@@ -178,14 +178,14 @@ class TestCaching:
             # First request
             response1 = client.get(
                 "/api/transactions",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response1.status_code == 200
             
             # Second request - should use cache
             response2 = client.get(
                 "/api/transactions",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response2.status_code == 200
 

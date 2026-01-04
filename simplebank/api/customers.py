@@ -24,14 +24,14 @@ def read_customers(
     limit: int = 100, 
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(customer_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """Get all customers.
     
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via customer_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key("/api/customers", {"skip": skip, "limit": limit}, user_id=user_id)
     
     # Try to get from cache
@@ -52,14 +52,14 @@ def read_customer(
     customer_id: int, 
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(customer_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """Get a customer by ID.
     
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via customer_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key(f"/api/customers/{customer_id}", {}, user_id=user_id)
     
     # Try to get from cache
@@ -83,12 +83,12 @@ def create_customer(
     customer: schemas.CustomerCreate,
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(customer_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Create a new customer.
     
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via customer_audit dependency.
     """
     db_customer = models.Customer(name=customer.name)

@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 from simplebank.main import app
 from simplebank.tests.conftest import test_db, TestingSessionLocal
 from simplebank.models.models import User, Customer, Account, Transaction
-from simplebank.utils.security_deps import API_KEY
+# API_KEY removed - using JWT authentication
 from simplebank.utils.jwt_utils import create_access_token, create_refresh_token
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -98,13 +98,12 @@ class TestIntegration:
             assert token_info is not None
             assert token_info.username == "jwt_api_user"
 
-    def test_api_access_with_api_key(self, client, test_db):
-        """Test API access with API key (backward compatibility)"""
-        # API key authentication should still work
-        response = client.get("/api/customers", headers={"X-API-Key": API_KEY})
+    def test_api_access_with_jwt(self, client, test_db, auth_headers):
+        """Test API access with JWT token"""
+        response = client.get("/api/customers", headers=auth_headers)
         assert response.status_code == 200
 
-    def test_caching_behavior_in_api_calls(self, client, test_db, mock_redis):
+    def test_caching_behavior_in_api_calls(self, client, test_db, mock_redis, auth_headers):
         """Test caching behavior in real API calls"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # Create test data
@@ -125,7 +124,7 @@ class TestIntegration:
             # First request - should query database and cache
             response1 = client.get(
                 f"/api/accounts/{account.id}",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response1.status_code == 200
             data1 = response1.json()
@@ -133,7 +132,7 @@ class TestIntegration:
             # Second request - should use cache
             response2 = client.get(
                 f"/api/accounts/{account.id}",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response2.status_code == 200
             data2 = response2.json()
@@ -196,7 +195,7 @@ class TestIntegration:
                 # But is_token_blacklisted should return True
                 assert is_token_blacklisted(access_token) is True
 
-    def test_cache_invalidation_on_mutation(self, client, test_db, mock_redis):
+    def test_cache_invalidation_on_mutation(self, client, test_db, mock_redis, auth_headers):
         """Test that cache is invalidated on data mutations"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # Create customer
@@ -212,7 +211,7 @@ class TestIntegration:
             # Get customer accounts (empty, will be cached)
             response1 = client.get(
                 f"/api/customers/{customer.id}/accounts",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response1.status_code == 200
             initial_accounts = response1.json()
@@ -221,7 +220,7 @@ class TestIntegration:
             response2 = client.post(
                 "/api/accounts",
                 json={"customer_id": customer.id, "initial_deposit": 500.0},
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response2.status_code == 200
             
@@ -229,7 +228,7 @@ class TestIntegration:
             # (Cache should be invalidated, so fresh data is fetched)
             response3 = client.get(
                 f"/api/customers/{customer.id}/accounts",
-                headers={"X-API-Key": API_KEY}
+                headers=auth_headers
             )
             assert response3.status_code == 200
             # Note: In real scenario with proper cache invalidation,

@@ -1,14 +1,13 @@
-from fastapi import Request, Response, HTTPException, Header, status, Depends
+from fastapi import Request, Response, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 import time
-import secrets
-from typing import Dict, Optional
+from typing import Optional
 import logging
 from sqlalchemy.orm import Session
 
 from simplebank.database import get_db
-from simplebank.utils.jwt_utils import verify_token, get_current_user as get_user_from_token
+from simplebank.utils.jwt_utils import get_current_user
 from simplebank.utils.redis_token_store import is_token_blacklisted
 from simplebank.utils.redis_rate_limit import check_rate_limit_redis
 from simplebank.models.models import User
@@ -17,11 +16,10 @@ from simplebank.models.models import User
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-API_KEY = os.getenv("API_KEY", "dev_api_key")
 RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))
 RATE_LIMIT_WINDOW = 60  # Window in seconds
 
-security = HTTPBearer(auto_error=False)
+security = HTTPBearer()
 
 # Standard security headers to prevent XSS attacks and cache attacks
 SECURITY_HEADERS = {
@@ -39,52 +37,46 @@ def check_rate_limit(ip: str) -> bool:
 
 
 async def verify_jwt_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
-) -> Optional[User]:
+) -> User:
     """
     Dependency for JWT token verification.
-    Returns User if token is valid, None otherwise.
+    Returns User if token is valid, raises HTTPException otherwise.
     """
-    if credentials is None:
-        return None
+    # Skip for OPTIONS requests (CORS preflight)
+    if request.method == "OPTIONS":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     token = credentials.credentials
     
     # Check if token is blacklisted
     if is_token_blacklisted(token):
         logger.warning("Blacklisted token attempted access")
-        return None
-    
-    # Verify token and get user
-    user = get_user_from_token(token, db)
-    return user
-
-
-async def verify_api_key(
-    request: Request,
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
-) -> Optional[str]:
-    """Dependency for API key verification"""
-    # Skip for OPTIONS requests (CORS preflight)
-    if request.method == "OPTIONS":
-        return None
-        
-    # Verify API key
-    if not x_api_key or x_api_key != API_KEY:
-        # Get client IP safely
-        client_ip = getattr(request.client, 'host', '127.0.0.1')
-        logger.warning(f"Invalid API key attempt from {client_ip}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
-            headers={"WWW-Authenticate": "ApiKey"},
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Check rate limits - handle None client safely
-    client_ip = getattr(request.client, 'host', '127.0.0.1')
-    if not check_rate_limit(client_ip):
-        logger.warning(f"Rate limit exceeded for {client_ip}")
+    # Verify token and get user
+    user = get_current_user(token, db)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check rate limits using user ID or IP
+    identifier = f"user:{user.id}" if user else getattr(request.client, 'host', '127.0.0.1')
+    if not check_rate_limit_redis(identifier):
+        logger.warning(f"Rate limit exceeded for {identifier}")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Rate limit exceeded, please try again later",
@@ -93,38 +85,7 @@ async def verify_api_key(
     # Store start time for timing requests
     request.state.start_time = time.time()
     
-    return x_api_key
-
-
-async def get_current_user_optional(
-    request: Request,
-    jwt_user: Optional[User] = Depends(verify_jwt_token),
-    api_key: Optional[str] = Depends(verify_api_key)
-) -> Optional[User]:
-    """
-    Dependency that accepts either JWT or API key authentication.
-    Returns User if JWT is provided, None if API key is used.
-    """
-    # If JWT user is provided, use it
-    if jwt_user is not None:
-        # Store start time for timing requests
-        request.state.start_time = time.time()
-        return jwt_user
-    
-    # If API key is provided, return None (API key auth doesn't have a user)
-    if api_key is not None:
-        return None
-    
-    # Neither authentication method provided
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-def generate_api_key() -> str:
-    """Generate a secure API key"""
-    return secrets.token_urlsafe(32)
+    return user
 
 def log_request(request: Request, operation: str, status_code: int, duration: float) -> None:
     """Log request details for security audit"""
@@ -147,7 +108,7 @@ class SecurityAudit:
         self.operation_name = operation_name
         
     async def __call__(self, request: Request, response: Response):
-        # Get the start time stored by verify_api_key
+        # Get the start time stored by verify_jwt_token
         start_time = getattr(request.state, "start_time", time.time())
         
         # Calculate duration

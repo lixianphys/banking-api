@@ -12,7 +12,7 @@ import json
 from simplebank.database import get_db
 from simplebank.models.models import Base
 from simplebank.models import models
-from simplebank.utils.security_deps import API_KEY, SECURITY_HEADERS, SecurityAudit
+from simplebank.utils.security_deps import SECURITY_HEADERS, SecurityAudit
 from simplebank.main import app
 from simplebank.utils.init_db import init_customers
 
@@ -109,50 +109,50 @@ def sample_transactions():
         db.close()
 
 class TestGeneralFeatures:
-    def test_read_customers(self, client, test_db, mock_redis):
+    def test_read_customers(self, client, test_db, mock_redis, auth_headers, test_user):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
-            response = client.get("/api/customers",headers={"X-API-Key": API_KEY})
+            response = client.get("/api/customers", headers=auth_headers)
             assert response.status_code == 200
             customers = response.json()
             assert len(customers) == 4
             assert customers[0]["name"] == "Arisha Barron"
 
-    def test_create_customer(self, client, test_db, mock_redis):
+    def test_create_customer(self, client, test_db, mock_redis, auth_headers):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
-            response = client.post("/api/customers", json={"name": "John Doe"},headers={"X-API-Key": API_KEY})
+            response = client.post("/api/customers", json={"name": "John Doe"}, headers=auth_headers)
             assert response.status_code == 200
             data = response.json()
             assert "message" in data
             assert "created successfully" in data["message"].lower()
 
-    def test_get_customer(self, client, test_db, mock_redis):
+    def test_get_customer(self, client, test_db, mock_redis, auth_headers):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
-            response = client.get("/api/customers/1",headers={"X-API-Key": API_KEY})
+            response = client.get("/api/customers/1", headers=auth_headers)
             assert response.status_code == 200
             customer = response.json()
             assert customer["name"] == "Arisha Barron"
 
-    def test_create_account(self, client, test_db, mock_redis):
+    def test_create_account(self, client, test_db, mock_redis, auth_headers):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             response = client.post(
                 "/api/accounts",
-                json={"customer_id": 1, "initial_deposit": 100.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 1, "initial_deposit": 100.0}, headers=auth_headers
             )
             assert response.status_code == 200
             data = response.json()
             assert "message" in data
             assert "created successfully" in data["message"].lower()
 
-    def test_get_account_balance(self, client, test_db, mock_redis):
+    def test_get_account_balance(self, client, test_db, mock_redis, auth_headers):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # First create an account
             client.post(
                 "/api/accounts",
-                json={"customer_id": 1, "initial_deposit": 500.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 1, "initial_deposit": 500.0}, headers=auth_headers
             )
             
             # Get the account ID from the API (using customer accounts endpoint)
-            accounts_response = client.get("/api/customers/1/accounts", headers={"X-API-Key": API_KEY})
+            accounts_response = client.get("/api/customers/1/accounts", headers=auth_headers)
             assert accounts_response.status_code == 200
             accounts = accounts_response.json()
             # Find the account we just created (should be the last one with balance 500.0)
@@ -161,28 +161,28 @@ class TestGeneralFeatures:
             account_id = account["id"]
             
             # Then get its balance
-            balance_response = client.get(f"/api/accounts/{account_id}/balance",headers={"X-API-Key": API_KEY})
+            balance_response = client.get(f"/api/accounts/{account_id}/balance",headers=auth_headers)
             assert balance_response.status_code == 200
             data = balance_response.json()
             assert data["account_id"] == account_id
             assert data["balance"] == 500.0
 
 
-    def test_transfer_money(self, client, test_db, mock_redis):
+    def test_transfer_money(self, client, test_db, mock_redis, auth_headers):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # Create two accounts
             client.post(
                 "/api/accounts",
-                json={"customer_id": 1, "initial_deposit": 1000.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 1, "initial_deposit": 1000.0}, headers=auth_headers
             )
             client.post(
                 "/api/accounts",
-                json={"customer_id": 2, "initial_deposit": 500.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 2, "initial_deposit": 500.0}, headers=auth_headers
             )
             
             # Get account IDs from the API
-            accounts1_response = client.get("/api/customers/1/accounts", headers={"X-API-Key": API_KEY})
-            accounts2_response = client.get("/api/customers/2/accounts", headers={"X-API-Key": API_KEY})
+            accounts1_response = client.get("/api/customers/1/accounts", headers=auth_headers)
+            accounts2_response = client.get("/api/customers/2/accounts", headers=auth_headers)
             accounts1 = accounts1_response.json()
             accounts2 = accounts2_response.json()
             # Find the accounts we just created
@@ -200,34 +200,34 @@ class TestGeneralFeatures:
                     "from_account_id": account1_id,
                     "to_account_id": account2_id,
                     "amount": transfer_amount
-                }, headers={"X-API-Key": API_KEY}
+                }, headers=auth_headers
             )
             assert transfer_response.status_code == 200
             
             # Check balances after transfer
-            balance1_response = client.get(f"/api/accounts/{account1_id}/balance",headers={"X-API-Key": API_KEY})
+            balance1_response = client.get(f"/api/accounts/{account1_id}/balance",headers=auth_headers)
             balance1 = balance1_response.json()["balance"]
             assert balance1 == 1000.0 - transfer_amount
             
-            balance2_response = client.get(f"/api/accounts/{account2_id}/balance",headers={"X-API-Key": API_KEY})
+            balance2_response = client.get(f"/api/accounts/{account2_id}/balance",headers=auth_headers)
             balance2 = balance2_response.json()["balance"]
             assert balance2 == 500.0 + transfer_amount
 
-    def test_insufficient_funds(self, client, test_db, mock_redis):
+    def test_insufficient_funds(self, client, test_db, mock_redis, auth_headers):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # Create an account with a small balance
             client.post(
                 "/api/accounts",
-                json={"customer_id": 1, "initial_deposit": 50.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 1, "initial_deposit": 50.0}, headers=auth_headers
             )
             client.post(
                 "/api/accounts",
-                json={"customer_id": 2, "initial_deposit": 100.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 2, "initial_deposit": 100.0}, headers=auth_headers
             )
             
             # Get account IDs from the API
-            accounts1_response = client.get("/api/customers/1/accounts", headers={"X-API-Key": API_KEY})
-            accounts2_response = client.get("/api/customers/2/accounts", headers={"X-API-Key": API_KEY})
+            accounts1_response = client.get("/api/customers/1/accounts", headers=auth_headers)
+            accounts2_response = client.get("/api/customers/2/accounts", headers=auth_headers)
             accounts1 = accounts1_response.json()
             accounts2 = accounts2_response.json()
             # Find the accounts we just created
@@ -244,25 +244,25 @@ class TestGeneralFeatures:
                     "from_account_id": account1_id,
                     "to_account_id": account2_id,
                     "amount": 100.0  # More than the 50.0 available
-                }, headers={"X-API-Key": API_KEY}
+                }, headers=auth_headers
             )
             assert transfer_response.status_code == 400  # Bad request - insufficient funds
 
-    def test_transfer_history(self, client, test_db, mock_redis):
+    def test_transfer_history(self, client, test_db, mock_redis, auth_headers):
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # Create two accounts
             client.post(
                 "/api/accounts",
-                json={"customer_id": 1, "initial_deposit": 1000.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 1, "initial_deposit": 1000.0}, headers=auth_headers
             )
             client.post(
                 "/api/accounts",
-                json={"customer_id": 2, "initial_deposit": 500.0}, headers={"X-API-Key": API_KEY}
+                json={"customer_id": 2, "initial_deposit": 500.0}, headers=auth_headers
             )
             
             # Get account IDs from the API
-            accounts1_response = client.get("/api/customers/1/accounts", headers={"X-API-Key": API_KEY})
-            accounts2_response = client.get("/api/customers/2/accounts", headers={"X-API-Key": API_KEY})
+            accounts1_response = client.get("/api/customers/1/accounts", headers=auth_headers)
+            accounts2_response = client.get("/api/customers/2/accounts", headers=auth_headers)
             accounts1 = accounts1_response.json()
             accounts2 = accounts2_response.json()
             # Find the accounts we just created
@@ -279,7 +279,7 @@ class TestGeneralFeatures:
                     "from_account_id": account1_id,
                     "to_account_id": account2_id,
                     "amount": 200.0
-                }, headers={"X-API-Key": API_KEY}
+                }, headers=auth_headers
             )
             
             client.post(
@@ -288,11 +288,11 @@ class TestGeneralFeatures:
                     "from_account_id": account2_id,
                     "to_account_id": account1_id,
                     "amount": 50.0
-                }, headers={"X-API-Key": API_KEY}
+                }, headers=auth_headers
             )
             
             # Get transfer history for account1
-            history_response = client.get(f"/api/accounts/{account1_id}/transactions",headers={"X-API-Key": API_KEY})
+            history_response = client.get(f"/api/accounts/{account1_id}/transactions",headers=auth_headers)
             assert history_response.status_code == 200
             data = history_response.json()
             
@@ -307,29 +307,29 @@ class TestGeneralFeatures:
 
 class TestSecurityFeatures:
     
-    def test_missing_api_key(self, client, test_db):
-        """Test that requests without API key are rejected"""
+    def test_missing_jwt_token(self, client, test_db):
+        """Test that requests without JWT token are rejected"""
         response = client.get("/api/customers/1")
-        assert response.status_code == 401
-        assert "Invalid or missing API key" in response.json()["detail"]
+        assert response.status_code == 403
+        assert "Not authenticated" in response.json()["detail"] or "Not authenticated" in str(response.json())
     
-    def test_invalid_api_key(self, client, test_db):
-        """Test that requests with invalid API key are rejected"""
-        response = client.get("/api/customers/1", headers={"X-API-Key": "invalid_key"})
+    def test_invalid_jwt_token(self, client, test_db):
+        """Test that requests with invalid JWT token are rejected"""
+        response = client.get("/api/customers/1", headers={"Authorization": "Bearer invalid_token"})
         assert response.status_code == 401
-        assert "Invalid or missing API key" in response.json()["detail"]
     
-    def test_valid_api_key(self, client, test_db, mock_redis):
-        """Test that requests with valid API key are accepted"""
+    def test_valid_jwt_token(self, client, test_db, mock_redis, auth_headers):
+        """Test that requests with valid JWT token are accepted"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
-            response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
-            # Even if the customer doesn't exist, we should get past the API key check
+            response = client.get("/api/customers/1", headers=auth_headers)
+            # Should get past authentication
             assert response.status_code != 401
+            assert response.status_code != 403
     
-    def test_security_headers(self, client, test_db, mock_redis):
+    def test_security_headers(self, client, test_db, mock_redis, auth_headers):
         """Test that security headers are added to responses"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
-            response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
+            response = client.get("/api/customers/1", headers=auth_headers)
             
             # Check that security headers were added
             for header, value in SECURITY_HEADERS.items():
@@ -341,14 +341,14 @@ class TestSecurityFeatures:
         # First set the mock to return False (rate limit exceeded)
         mock_check_rate_limit.return_value = False
         
-        response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
+        response = client.get("/api/customers/1", headers=auth_headers)
         assert response.status_code == 429
         assert "Rate limit exceeded" in response.json()["detail"]
         
         # Then set it to return True
         mock_check_rate_limit.return_value = True
         
-        response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
+        response = client.get("/api/customers/1", headers=auth_headers)
         assert response.status_code != 429
     
     
@@ -380,7 +380,7 @@ class TestSecurityFeatures:
                 assert mock_response.headers.get(header) == value
 
 class TestPaginationFeatures:
-    def test_transaction_pagination_basic(self, client, sample_transactions, mock_redis):
+    def test_transaction_pagination_basic(self, client, sample_transactions, mock_redis, auth_headers):
         """Test basic pagination of transactions endpoint"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             # Get the first account ID from the sample transactions
@@ -388,7 +388,7 @@ class TestPaginationFeatures:
             print(f"\nTesting pagination for account ID: {first_account_id}")
             
             # Get first page
-            headers = {"X-API-Key": API_KEY}
+            headers = auth_headers
             response = client.get(f"/api/accounts/{first_account_id}/transactions?limit=10", headers=headers)
             assert response.status_code == 200
             data = response.json()
@@ -422,12 +422,12 @@ class TestPaginationFeatures:
             assert not (first_page_ids & second_page_ids), "Found duplicate IDs between pages"
 
 
-    def test_transaction_pagination_last_page(self, client, sample_transactions, mock_redis):
+    def test_transaction_pagination_last_page(self, client, sample_transactions, mock_redis, auth_headers):
         """Test pagination behavior on the last page"""
         with patch('simplebank.utils.redis_cache.get_redis_client', return_value=mock_redis):
             first_account_id = sample_transactions[0].from_account_id
             
-            headers = {"X-API-Key": API_KEY}
+            headers = auth_headers
             response = client.get(f"/api/accounts/{first_account_id}/transactions?limit=20", headers=headers)
             assert response.status_code == 200
             data = response.json()
@@ -494,14 +494,14 @@ class TestRedisRateLimiting:
         # Mock rate limit exceeded
         mock_check_rate_limit.return_value = False
         
-        response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
+        response = client.get("/api/customers/1", headers=auth_headers)
         assert response.status_code == 429
         assert "Rate limit exceeded" in response.json()["detail"]
         
         # Mock rate limit OK
         mock_check_rate_limit.return_value = True
         
-        response = client.get("/api/customers/1", headers={"X-API-Key": API_KEY})
+        response = client.get("/api/customers/1", headers=auth_headers)
         assert response.status_code != 429
 
 

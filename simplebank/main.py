@@ -1,7 +1,6 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from simplebank.api import customers,accounts,transactions,auth
-from simplebank.utils.security_deps import verify_api_key
 from simplebank.utils.init_db import init_db, init_customers
 from simplebank.database import SessionLocal
 from simplebank.utils.redis_client import get_redis_client, close_redis
@@ -52,9 +51,9 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(customers.router, prefix="/api", tags=["customers"],dependencies=[Depends(verify_api_key)])
-app.include_router(accounts.router, prefix="/api", tags=["accounts"],dependencies=[Depends(verify_api_key)])
-app.include_router(transactions.router, prefix="/api", tags=["transactions"],dependencies=[Depends(verify_api_key)])
+app.include_router(customers.router, prefix="/api", tags=["customers"])
+app.include_router(accounts.router, prefix="/api", tags=["accounts"])
+app.include_router(transactions.router, prefix="/api", tags=["transactions"])
 
 
 @app.get("/")

@@ -24,11 +24,11 @@ transaction_audit = SecurityAudit(operation_name="Transaction API")
 def create_transaction(
     transaction: schemas.TransactionCreate,
     db: Session = Depends(get_db),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Create a new transaction
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via transaction_audit dependency.
     """
     # Check if both accounts exist
@@ -75,14 +75,14 @@ def read_transactions(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Get all transactions.
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via transaction_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key("/api/transactions", {"skip": skip, "limit": limit}, user_id=user_id)
     
     # Try to get from cache
@@ -112,15 +112,15 @@ def get_account_transactions(
     expand: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(transaction_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Get transactions with configurable response format and pagination.
     This endpoint supports caching and pagination.
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via transaction_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key(
         f"/api/accounts/{account_id}/transactions",
         {"detail_level": detail_level, "cursor": cursor, "limit": limit, "expand": expand},

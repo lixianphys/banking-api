@@ -8,6 +8,7 @@ from simplebank.database import get_db
 from simplebank.models import models, schemas
 from simplebank.models.models import User
 from simplebank.utils.security_deps import SecurityAudit, verify_jwt_token
+from simplebank.models.models import User
 from simplebank.utils.cache import check_conditional_request
 from simplebank.utils.redis_cache import (
     get_cache_key, get_cached_response, set_cached_response, invalidate_user_cache
@@ -27,11 +28,11 @@ def create_account(
     account: schemas.AccountCreate,
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(read_account_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Create a new account for a customer.
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via read_account_audit dependency.
     """
     # Check if customer exists
@@ -60,14 +61,14 @@ def read_accounts(
     limit: int = 100,
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(read_account_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Get all accounts.
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via read_account_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key("/api/accounts", {"skip": skip, "limit": limit}, user_id=user_id)
     
     # Try to get from cache
@@ -97,15 +98,15 @@ def read_account(
     expand: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(read_account_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Get account details with configurable response format. 
     This endpoint supports caching and pagination.
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via read_account_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key(
         f"/api/accounts/{account_id}",
         {"detail_level": detail_level, "expand": expand},
@@ -194,14 +195,14 @@ def read_account_balance(
     account_id: int,
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(read_account_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Get the balance of an account.
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via read_account_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key(f"/api/accounts/{account_id}/balance", {}, user_id=user_id)
     
     # Try to get from cache
@@ -225,14 +226,14 @@ def read_customer_accounts(
     customer_id: int,
     db: Session = Depends(get_db),
     audit: SecurityAudit = Depends(read_account_audit),
-    jwt_user: Optional[User] = Depends(verify_jwt_token)
+    jwt_user: User = Depends(verify_jwt_token)
 ):
     """
     Get all accounts for a customer.    
-    Protected by API key via global dependency.
+    Protected by JWT authentication.
     Audit logging via read_account_audit dependency.
     """
-    user_id = jwt_user.id if jwt_user else None
+    user_id = jwt_user.id
     cache_key = get_cache_key(f"/api/customers/{customer_id}/accounts", {}, user_id=user_id)
     
     # Try to get from cache
