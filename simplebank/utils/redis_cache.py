@@ -1,11 +1,24 @@
 import json
 import hashlib
 from typing import Optional, Any, Dict
+from datetime import datetime
 import logging
 
 from simplebank.utils.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
+
+
+class APIJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle datetime objects and Pydantic models"""
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if hasattr(obj, 'model_dump'):  # Pydantic v2 models
+            return obj.model_dump()
+        if hasattr(obj, 'dict'):  # Pydantic v1 models
+            return obj.dict()
+        return super().default(obj)
 
 
 def get_cache_key(endpoint: str, params: Dict[str, Any], user_id: Optional[int] = None) -> str:
@@ -74,8 +87,8 @@ def set_cached_response(key: str, value: Any, ttl: int = 60) -> bool:
     """
     try:
         redis_client = get_redis_client()
-        # Serialize data to JSON
-        serialized_data = json.dumps(value)
+        # Serialize data to JSON using custom encoder for datetime and Pydantic models
+        serialized_data = json.dumps(value, cls=APIJSONEncoder)
         redis_client.setex(key, ttl, serialized_data)
         return True
     except Exception as e:

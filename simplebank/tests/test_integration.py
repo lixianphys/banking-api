@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 
 from simplebank.main import app
 from simplebank.tests.conftest import test_db, TestingSessionLocal
-from simplebank.models.models import User, Customer, Account
+from simplebank.models.models import User, Customer, Account, Transaction
 from simplebank.utils.security_deps import API_KEY
 from simplebank.utils.jwt_utils import create_access_token, create_refresh_token
 

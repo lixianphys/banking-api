@@ -5,7 +5,7 @@ import time
 
 from simplebank.main import app
 from simplebank.tests.conftest import test_db, TestingSessionLocal
-from simplebank.models.models import Customer, Account
+from simplebank.models.models import User, Customer, Account, Transaction
 from simplebank.utils.security_deps import API_KEY
 from simplebank.utils.redis_cache import get_cache_key, get_cached_response, set_cached_response
 

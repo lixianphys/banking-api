@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 from passlib.context import CryptContext
 
 from simplebank.main import app
-from simplebank.models.models import User
+from simplebank.models.models import User, Customer, Account, Transaction
 from simplebank.tests.conftest import TestingSessionLocal, test_db
 from simplebank.utils.jwt_utils import create_access_token, create_refresh_token
 

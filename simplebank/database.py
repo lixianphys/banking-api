@@ -21,7 +21,7 @@ def get_db():
 
 # Create an asynchronous database driver
 engine_async=create_async_engine(SQLALCHEMY_DATABASE_URL_ASYNC, echo=True)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+AsyncSessionLocal = sessionmaker(engine_async, class_=AsyncSession, expire_on_commit=False)
 
 async def get_db_async():
     async with AsyncSessionLocal() as session:
