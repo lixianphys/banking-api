@@ -34,16 +34,6 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
-# Override async database dependency to use sync database for testing
-async def override_get_db_async():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db_async] = override_get_db_async
-
 
 @pytest.fixture(scope="function")
 def test_db():

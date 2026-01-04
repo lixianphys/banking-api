@@ -2,10 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from sqlalchemy import or_
-from sqlalchemy.ext.asyncio import AsyncSession
 import os
 
-from simplebank.database import get_db, get_db_async
+from simplebank.database import get_db
 from simplebank.models import models, schemas
 from simplebank.models.models import User
 from simplebank.utils.security_deps import SecurityAudit, verify_jwt_token
@@ -22,19 +21,19 @@ router = APIRouter()
 transaction_audit = SecurityAudit(operation_name="Transaction API")
 
 @router.post("/transactions", response_model=Dict[str, str],dependencies=[Depends(transaction_audit)])
-async def create_transaction(
+def create_transaction(
     transaction: schemas.TransactionCreate,
-    db: AsyncSession = Depends(get_db_async),
+    db: Session = Depends(get_db),
     jwt_user: Optional[User] = Depends(verify_jwt_token)
 ):
     """
-    Create a new transaction with async db
+    Create a new transaction
     Protected by API key via global dependency.
     Audit logging via transaction_audit dependency.
     """
-    # Check if both accounts exist``
-    from_account = await db.get(models.Account, transaction.from_account_id, with_for_update=True)
-    to_account = await db.get(models.Account, transaction.to_account_id, with_for_update=True)
+    # Check if both accounts exist
+    from_account = db.get(models.Account, transaction.from_account_id)
+    to_account = db.get(models.Account, transaction.to_account_id)
     
     if not from_account:
         raise HTTPException(status_code=404, detail="Source account not found")
@@ -59,10 +58,10 @@ async def create_transaction(
     db.add(db_transaction)
 
     try:
-        await db.commit()
-        # await db.refresh(db_transaction)
+        db.commit()
+        db.refresh(db_transaction)
     except Exception as e:
-        await db.rollback()
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
     # Invalidate cache for both accounts' transactions and balances
@@ -103,7 +102,7 @@ def read_transactions(
     "/accounts/{account_id}/transactions", 
     response_model=schemas.PaginatedTransactions
 )
-async def get_account_transactions(
+def get_account_transactions(
     account_id: int,
     request: Request,
     response: Response,
