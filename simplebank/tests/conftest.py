@@ -84,6 +84,7 @@ def test_user(test_db, client):
     }
     register_response = client.post("/api/auth/register", json=register_data)
     assert register_response.status_code == 201
+    user_data = register_response.json()
     
     # Login to get token
     login_data = {
@@ -95,14 +96,17 @@ def test_user(test_db, client):
     tokens = login_response.json()
     access_token = tokens["access_token"]
     
-    # Get user from database
-    db = TestingSessionLocal()
-    try:
-        user = db.query(User).filter(User.username == "testuser").first()
-        assert user is not None
-        yield user, access_token
-    finally:
-        db.close()
+    # Create a mock user object from the response data
+    # We can't query the database due to SQLite in-memory connection issues
+    # So we create a minimal user object with the data we need
+    user = User(
+        id=user_data["id"],
+        username=user_data["username"],
+        email=user_data["email"],
+        is_active=user_data["is_active"]
+    )
+    
+    yield user, access_token
 
 
 @pytest.fixture
