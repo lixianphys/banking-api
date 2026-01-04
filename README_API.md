@@ -12,7 +12,7 @@ A simple banking API (version 0.1.0) built with FastAPI that allows users to man
 - Retrieve transaction history for accounts
 
 #### Advanced
-- Security: JWT authentication, API key authentication, Redis-based rate limiting, security headers, request auditing, token blacklisting
+- Security: JWT authentication, Redis-based rate limiting, security headers, request auditing, token blacklisting
 - Mobile performance optimization: Redis caching, response customization, cursor-based pagination, resource expansion
 
 ## Getting Started
@@ -69,26 +69,28 @@ pytest simplebank/tests/
 
 ## API Endpoints
 
-#### Authentication
+> **Note**: All endpoints (except authentication endpoints) require JWT authentication via `Authorization: Bearer <token>` header.
+
+#### Authentication (Public Endpoints)
 - `POST /api/auth/register` - Register a new user (username, email, password)
 - `POST /api/auth/login` - Login and receive JWT access and refresh tokens
 - `POST /api/auth/refresh` - Refresh access token using refresh token
-- `POST /api/auth/logout` - Logout and blacklist access token
-- `GET /api/auth/me` - Get current authenticated user information
+- `POST /api/auth/logout` - Logout and blacklist access token (requires JWT)
+- `GET /api/auth/me` - Get current authenticated user information (requires JWT)
 
-#### Customers
+#### Customers (Requires JWT)
 - `GET /api/customers` - Get all customers
 - `GET /api/customers/{customer_id}` - Get a specific customer
 - `POST /api/customers` - Create a new customer
 
-#### Accounts
+#### Accounts (Requires JWT)
 - `POST /api/accounts` - Create a new account with initial deposit
 - `GET /api/accounts` - Get all accounts
 - `GET /api/accounts/{account_id}` - Get a specific account (optimized for mobile by caching and pagination)
 - `GET /api/accounts/{account_id}/balance` - Get the balance of an account
 - `GET /api/customers/{customer_id}/accounts` - Get all accounts for a customer
 
-#### Transactions
+#### Transactions (Requires JWT)
 - `POST /api/transactions` - Create a new transaction (transfer money)
 - `GET /api/transactions` - Get all transactions
 - `GET /api/accounts/{account_id}/transactions` - Get transaction history for an account
@@ -105,21 +107,16 @@ pytest simplebank/tests/
 The API implements several security measures to protect against common threats:
 
 #### JWT Authentication
-- User registration and login endpoints
+- **Required for all API endpoints** - All endpoints require JWT authentication
+- User registration and login endpoints (publicly accessible)
 - JWT access tokens (short-lived, default 15 minutes)
 - JWT refresh tokens (long-lived, default 7 days)
 - Token blacklisting on logout
 - Access tokens via `Authorization: Bearer <token>` header
-- All authentication endpoints are publicly accessible
-
-#### API Key Authentication
-- Alternative authentication method for service-to-service communication
-- All endpoints accept either JWT tokens or API key via `X-API-Key` header
-- Protects against unauthorized access to sensitive banking operations
-- Backward compatible with existing API key-based clients
+- All business endpoints require valid JWT token for access
 
 #### Rate Limiting
-- Redis-based rate limiting per IP address or user
+- Redis-based rate limiting per user (identified by user ID from JWT token)
 - Sliding window algorithm for accurate rate limiting
 - Prevents brute force attacks and API abuse
 - Configurable via environment variables (`RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW`)
@@ -210,6 +207,10 @@ Response:
 
 #### Use JWT Token for API Access
 ```bash
+# All API endpoints require JWT authentication
+curl -X GET "http://localhost:8000/api/customers" \
+  -H "Authorization: Bearer <access_token>"
+
 curl -X GET "http://localhost:8000/api/auth/me" \
   -H "Authorization: Bearer <access_token>"
 ```

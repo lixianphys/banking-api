@@ -17,7 +17,6 @@ graph TB
         %% Authentication Layer
         subgraph "Authentication"
             JWTAuth[JWT Authentication<br/>verify_jwt_token]
-            APIKeyAuth[API Key Auth<br/>verify_api_key]
             AuthRouter[auth.py<br/>Login/Register/Refresh]
         end
         
@@ -69,11 +68,10 @@ graph TB
     Client --> LB
     LB --> Main
     Main --> JWTAuth
-    Main --> APIKeyAuth
     Main --> AuthRouter
     JWTAuth --> TokenBlacklist
     TokenBlacklist --> Redis
-    APIKeyAuth --> RateLimit
+    JWTAuth --> RateLimit
     RateLimit --> Redis
     AuthRouter --> DB
     Main --> CORS
@@ -120,9 +118,9 @@ sequenceDiagram
     participant API
     participant Database
     
-    Client->>FastAPI: HTTP Request<br/>(JWT or API Key)
-    FastAPI->>Security: Verify Auth<br/>(JWT or API Key)
-    Security->>Redis: Check Token Blacklist<br/>(if JWT)
+    Client->>FastAPI: HTTP Request<br/>(JWT Token)
+    FastAPI->>Security: Verify JWT Token
+    Security->>Redis: Check Token Blacklist
     Redis-->>Security: Token Status
     Security->>Redis: Check Rate Limit
     Redis-->>Security: Rate Limit Status
@@ -164,10 +162,8 @@ sequenceDiagram
 - User profile endpoint (`/api/auth/me`)
 
 ### 3. **Security Layer** (`utils/security_deps.py`)
-- JWT authentication via `Authorization: Bearer <token>` header
-- API key authentication via `X-API-Key` header (backward compatible)
-- Dual authentication support (JWT or API key)
-- Redis-based rate limiting per IP address or user
+- JWT authentication via `Authorization: Bearer <token>` header (required for all endpoints)
+- Redis-based rate limiting per user (identified by user ID from JWT token)
 - Security headers injection
 - Request auditing and logging
 - Token blacklist checking
@@ -221,11 +217,9 @@ sequenceDiagram
 ## Key Features
 
 ### Security
-- **JWT Authentication**: User-based authentication with access and refresh tokens
-- **API Key Authentication**: Service-to-service authentication (backward compatible)
-- **Dual Authentication**: Endpoints support both JWT and API key methods
+- **JWT Authentication**: User-based authentication with access and refresh tokens (required for all endpoints)
 - **Token Blacklisting**: JWT tokens blacklisted on logout using Redis
-- **Redis-based Rate Limiting**: Distributed rate limiting with sliding window algorithm
+- **Redis-based Rate Limiting**: Distributed rate limiting per user with sliding window algorithm
 - **Security Headers**: Standard security headers on all responses
 - **Request Auditing**: Comprehensive logging of all API operations
 - **CORS Protection**: Configurable CORS middleware
