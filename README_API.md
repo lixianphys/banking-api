@@ -12,8 +12,8 @@ A simple banking API (version 0.1.0) built with FastAPI that allows users to man
 - Retrieve transaction history for accounts
 
 #### Advanced
-- Security: API key authentication, request rate limiting, security header, request auditing 
-- Mobile performance optimization: caching, response customization, cursor-based pagination, resource expansion
+- Security: JWT authentication, API key authentication, Redis-based rate limiting, security headers, request auditing, token blacklisting
+- Mobile performance optimization: Redis caching, response customization, cursor-based pagination, resource expansion
 
 ## Getting Started
 
@@ -21,6 +21,7 @@ A simple banking API (version 0.1.0) built with FastAPI that allows users to man
 
 - Python 3.8+
 - pip (Python package manager)
+- Redis 7+ (for caching and rate limiting)
 
 #### Installation
 
@@ -30,7 +31,27 @@ pip install -r requirements.txt
 
 #### Running the Application
 
-Start the server with:
+**Using Docker Compose (Recommended):**
+```bash
+docker-compose up
+```
+
+**Manual Setup:**
+1. Start Redis:
+```bash
+redis-server
+```
+
+2. Set environment variables (optional, defaults provided):
+```bash
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
+export JWT_SECRET_KEY=your_secret_key_here
+export JWT_ACCESS_TOKEN_EXPIRE_MINUTES=15
+export JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+```
+
+3. Start the server:
 ```bash
 python run.py
 ```
@@ -47,6 +68,13 @@ pytest simplebank/tests/
 ```
 
 ## API Endpoints
+
+#### Authentication
+- `POST /api/auth/register` - Register a new user (username, email, password)
+- `POST /api/auth/login` - Login and receive JWT access and refresh tokens
+- `POST /api/auth/refresh` - Refresh access token using refresh token
+- `POST /api/auth/logout` - Logout and blacklist access token
+- `GET /api/auth/me` - Get current authenticated user information
 
 #### Customers
 - `GET /api/customers` - Get all customers
@@ -76,14 +104,25 @@ pytest simplebank/tests/
 
 The API implements several security measures to protect against common threats:
 
+#### JWT Authentication
+- User registration and login endpoints
+- JWT access tokens (short-lived, default 15 minutes)
+- JWT refresh tokens (long-lived, default 7 days)
+- Token blacklisting on logout
+- Access tokens via `Authorization: Bearer <token>` header
+- All authentication endpoints are publicly accessible
+
 #### API Key Authentication
-- All endpoints require a valid API key via the `X-API-Key` header
+- Alternative authentication method for service-to-service communication
+- All endpoints accept either JWT tokens or API key via `X-API-Key` header
 - Protects against unauthorized access to sensitive banking operations
+- Backward compatible with existing API key-based clients
 
 #### Rate Limiting
-- Limits the number of requests from a single IP address
+- Redis-based rate limiting per IP address or user
+- Sliding window algorithm for accurate rate limiting
 - Prevents brute force attacks and API abuse
-- Configurable via environment variables
+- Configurable via environment variables (`RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW`)
 
 #### Security Headers
 - Implements standard security headers on all responses:
@@ -97,10 +136,25 @@ The API implements several security measures to protect against common threats:
 - Logs all API operations with client IP, method, path, status code, and duration
 - Provides an audit trail for security monitoring and troubleshooting
 
+#### Token Management
+- JWT tokens are blacklisted on logout using Redis
+- Refresh tokens stored in Redis for validation
+- Automatic token expiration and validation
+
 ## Mobile Performance Optimization
 
-#### Caching
-- Implements ETag-based caching for efficient resource retrieval
+#### Redis Caching
+- Server-side caching using Redis for improved performance
+- User-specific cache keys to prevent data leakage
+- Automatic cache invalidation on data mutations
+- Configurable TTL per endpoint type:
+  - Account data: 60 seconds (default)
+  - Transaction data: 30 seconds (default)
+- Cache hit/miss handling for optimal performance
+- Reduces database load and improves response times
+
+#### ETag-based Caching
+- Implements ETag-based HTTP caching for efficient resource retrieval
 - Supports conditional requests with 304 Not Modified responses
 - Reduces bandwidth usage and improves API performance
 - Automatically generates ETags based on response content
@@ -120,5 +174,79 @@ The API implements several security measures to protect against common threats:
 - Implements efficient cursor-based pagination for large result sets
 - Provides consistent results even when data changes between requests (better than offset)
 - Includes `next_cursor` in responses for easy navigation
-- Example: `GET /api/accounts/{account_id}/transactions?cursor={next_cursor}=&limit=20`
+- Example: `GET /api/accounts/{account_id}/transactions?cursor={next_cursor}&limit=20`
+
+## Authentication Examples
+
+#### Register a New User
+```bash
+curl -X POST "http://localhost:8000/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "email": "john@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+#### Login and Get Tokens
+```bash
+curl -X POST "http://localhost:8000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "password": "securepassword123"
+  }'
+```
+
+Response:
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer"
+}
+```
+
+#### Use JWT Token for API Access
+```bash
+curl -X GET "http://localhost:8000/api/auth/me" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+#### Refresh Access Token
+```bash
+curl -X POST "http://localhost:8000/api/auth/refresh" \
+  -H "Refresh-Token: <refresh_token>"
+```
+
+#### Logout
+```bash
+curl -X POST "http://localhost:8000/api/auth/logout" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+## Environment Variables
+
+The following environment variables can be configured:
+
+#### Redis Configuration
+- `REDIS_HOST` - Redis host (default: localhost)
+- `REDIS_PORT` - Redis port (default: 6379)
+- `REDIS_PASSWORD` - Redis password (optional)
+- `REDIS_DB` - Redis database number (default: 0)
+
+#### JWT Configuration
+- `JWT_SECRET_KEY` - Secret key for JWT signing (required in production)
+- `JWT_ALGORITHM` - JWT algorithm (default: HS256)
+- `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` - Access token TTL in minutes (default: 15)
+- `JWT_REFRESH_TOKEN_EXPIRE_DAYS` - Refresh token TTL in days (default: 7)
+
+#### Cache Configuration
+- `CACHE_TTL_ACCOUNTS` - Cache TTL for account endpoints in seconds (default: 60)
+- `CACHE_TTL_TRANSACTIONS` - Cache TTL for transaction endpoints in seconds (default: 30)
+
+#### Rate Limiting
+- `RATE_LIMIT_MAX` - Maximum requests per window (default: 60)
+- `RATE_LIMIT_WINDOW` - Time window in seconds (default: 60)
 
